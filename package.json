@@ -1,0 +1,45 @@
+{
+  "name": "iso-deck",
+  "version": "0.1.0",
+  "description": "把口播稿做成会动的等距图解 PPT：流程模型 + 故事分页 + 数字台账 + 截图检查。一个 Agent Skill。",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "iso-deck": "scripts/cli.mjs"
+  },
+  "files": [
+    "SKILL.md",
+    "README.md",
+    "README.en.md",
+    "LICENSE",
+    "engine",
+    "references",
+    "scripts",
+    "templates",
+    "examples/*/index.html"
+  ],
+  "scripts": {
+    "validate": "node scripts/cli.mjs validate examples/ai-translation examples/order-flow templates/report.html templates/system.html",
+    "shoot": "node scripts/cli.mjs shoot",
+    "gallery": "node scripts/cli.mjs gallery",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "agent-skill",
+    "isometric",
+    "slides",
+    "presentation",
+    "diagram",
+    "cursor",
+    "claude-code",
+    "codex"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Trade-Offf/iso-deck.git"
+  },
+  "homepage": "https://trade-offf.github.io/iso-deck/"
+}

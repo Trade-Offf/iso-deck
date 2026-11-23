@@ -1,0 +1,559 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI 翻译提效 · 动态图解</title>
+  <link rel="stylesheet" href="../../engine/iso.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="../../engine/iso-stage.js"></script>
+  <script src="../../engine/iso-deck.js"></script>
+  <script>
+    const { block, db, crowd, zone, note, link, hot } = Iso.h;
+
+    /* ================= 流程模型：画面里有什么、谁连着谁（每页只按 id 引用） ================= */
+    // 平台主线沿 +y（屏幕右上）：开发 → key 表 → 测试 → 预发 → 正式 → 用户
+    // 平台外支线沿 +x（屏幕右下）：产品 → 翻译负责人 → 译员 / Excel → 回填
+    const TMS = { x0: -25, x1: 6, y0: -20.5, y1: -3 };
+    const OUT = { x0: 11, x1: 32, y0: -19, y1: 1 };
+
+    const E = {
+      dev: (o) => block(2, -30, { color: 'blue', glyph: 'code', label: ['开发'], sub: '定义 key', ...o }),
+      tms: (o) => zone(TMS, 'TMS 多语言平台', { tint: 'blue', ...o }),
+      keys: (o) => db(2, -10, { r: 1.9, h: 34, color: 'purple', glyph: 'database', label: 'key 表', ...o }),
+      pm: (o) => block(16, -30, { color: 'orange', glyph: 'user', label: ['产品'], sub: '提需求', ...o }),
+      out: (o) => zone(OUT, '平台外', { ...o }),
+      lead: (o) => block(16, -14, { color: 'yellow', glyph: 'users', label: ['翻译', '负责人'], ...o }),
+      staff: (o) => crowd({ x0: 24, x1: 30, y0: -17, y1: -11 }, 8, '全职 / 兼职译员', o),
+      excel: (o) => block(16, -3, { s: 3, h: 22, color: 'green', glyph: 'file', label: ['Excel'], ...o }),
+      test: (o) => block(2, 4, { s: 3, h: 28, color: 'gray', glyph: 'monitor', label: ['测试'], ...o }),
+      staging: (o) => block(2, 10, { s: 3, h: 28, color: 'gray', glyph: 'layers', label: ['预发'], ...o }),
+      prod: (o) => block(2, 16, { s: 3, h: 28, color: 'blue', glyph: 'rocket', label: ['正式'], ...o }),
+      users: (o) => crowd({ x0: -2, x1: 6, y0: 21, y1: 28 }, 14, '多国用户 · 切换母语', o),
+      ai: (o) => block(-11, -10, { s: 3.4, h: 34, color: 'green', glyph: 'bot', label: ['AI 翻译'], sub: 'DeepSeek', ...o }),
+      gloss: (o) => db(-21.5, -10.5, { r: 1.4, h: 22, color: 'orange', glyph: 'file', label: '术语表', ...o }),
+      prompt: (o) => db(-14.5, -17.5, { r: 1.4, h: 22, color: 'yellow', glyph: 'message', label: '角色提示词', ...o }),
+      check: (o) => block(-4.5, -10, { s: 2.8, h: 20, color: 'orange', glyph: 'shield', label: ['校验'], ...o }),
+    };
+
+    // 请求走 y-3.5 的“上车道”，写回走 y 轴主线，两条线不重叠
+    const LANE = ['keys', ['keys', 'keys-3.5'], ['ai', 'keys-3.5'], 'ai'];
+    const L = {
+      dk: (o) => link('dev', 'keys', { label: '定义 key', labelAt: 0.4, ...o }),
+      pr: (o) => link('pm', 'lead', { label: '请翻译这批 key', ...o }),
+      ls: (o) => link('lead', 'staff', { heads: 'both', label: '拆语言 · 催进度', ...o }),
+      le: (o) => link('lead', 'excel', { label: '从零翻译', ...o }),
+      bf: (o) => link('excel', 'keys', ['excel', ['keys', 'excel'], 'keys'], { style: 'dashed', label: '回填 · @产品', labelAt: 0.35, ...o }),
+      p1: (o) => link('keys', 'test', { label: '发布', ...o }),
+      p2: (o) => link('test', 'staging', o),
+      p3: (o) => link('staging', 'prod', o),
+      p4: (o) => link('prod', 'users', o),
+      rv: (o) => link('keys', 'lead', ['keys', ['lead', 'keys'], 'lead'], { heads: 'both', label: '审核', labelAt: 0.6, ...o }),
+      ka: (o) => link('keys', 'ai', LANE, { label: '只翻空格 · ≤ {batch}', labelAt: 0.45, ...o }),
+      ga: (o) => link('gloss', 'ai', o),
+      pa: (o) => link('prompt', 'ai', o),
+      ak: (o) => link('ai', 'keys', ['ai', 'keys'], { label: '写回', ...o }),
+      ac: (o) => link('ai', 'check', o),
+      ck: (o) => link('check', 'keys', o),
+    };
+    const pick = (names, opt = {}) => Object.fromEntries(names.map((n) => [n, opt[n] || true]));
+    const MUTED = { style: 'muted' };
+    const muteAll = (names) => Object.fromEntries(names.map((n) => [n, MUTED]));
+    const MODEL = {
+      entities: Object.fromEntries(Object.entries(E).map(([k, f]) => [k, f()])),
+      links: Object.fromEntries(Object.entries(L).map(([k, f]) => [k, f()])),
+    };
+
+    const DIM = { dim: 1 };
+    const OLD = ['dev', 'tms', 'keys', 'pm', 'out', 'lead', 'staff', 'excel', 'test', 'staging', 'prod', 'users'];
+    const OLD_LINKS = ['dk', 'pr', 'ls', 'le', 'bf', 'p1', 'p2', 'p3', 'p4'];
+    const NEW = ['dev', 'tms', 'keys', 'pm', 'out', 'lead', 'gloss', 'prompt', 'ai', 'check', 'test', 'staging', 'prod', 'users'];
+    const NEW_LINKS = ['dk', 'pr', 'rv', 'ka', 'ga', 'pa', 'ac', 'ck', 'p1', 'p2', 'p3', 'p4'];
+    const REVIEWER = { label: ['翻译', '同事'], sub: '审核' };
+
+    /* key 的多语言扇出 */
+    const LANGS = [
+      ['zh-CN', '确认'], ['en-US', 'Confirm'], ['ja-JP', '確認'], ['ko-KR', '확인'], ['th-TH', 'ยืนยัน'], ['vi-VN', 'Xác nhận'],
+      ['es-ES', 'Confirmar'], ['fr-FR', 'Confirmer'], ['de-DE', 'Bestätigen'], ['ru-RU', 'Подтвердить'], ['tr-TR', 'Onayla'], ['id-ID', 'Konfirmasi'],
+    ];
+    const fanout = () => {
+      const entities = { key: block(0, 0, { s: 4.2, h: 40, color: 'yellow', glyph: 'key', label: ['确认'], sub: 'btn.confirm' }) };
+      const links = {};
+      const flows = [];
+      LANGS.forEach(([code, text], i) => {
+        const a = (i / LANGS.length) * Math.PI * 2 - Math.PI / 2;
+        entities[`n${i}`] = note(Math.cos(a) * 12.5, Math.sin(a) * 12.5, `${code}  ${text}`, { tone: i === 0 ? 'dark' : 'paper' });
+        links[`l${i}`] = link('key', `n${i}`, { style: 'muted' });
+        flows.push({ route: [`l${i}`], rate: 0.5, kind: 'push' });
+      });
+      return { entities, links, flows };
+    };
+
+    /* 结果页用的“等距柱状图” */
+    const bar = (x, y, h, o) => block(x, y, { s: 3.2, h, radius: 7, glyph: '', ...o });
+
+    /* ================= 数字台账：页面上的每个数字都从这里取，写明出处 ================= */
+    // 公开示例：数字为示意值，不是真实业务口径
+    const FACTS = {
+      langs: { value: '10+', source: '示例数据：平台已上线的语言数' },
+      groups: { value: '3 个组', source: '示例数据：接入平台的业务组' },
+      projects: { value: '3–5 个项目', source: '示例数据：每组同时推进的项目数' },
+      batch: { value: '50 条', source: '工作流配置：单次最多翻译条数' },
+      retry: { value: '1 次', source: '工作流配置：校验失败的重试次数' },
+      wait_old: { value: '0.5–1 天', source: '示例数据：翻译负责人估算的单项目等待' },
+      wait_new: { value: '≈ 0', source: '示例数据：AI 翻完 50 条约 1 分钟' },
+      cost_old: { value: '¥1.2', source: '示例数据：现有翻译工具套餐按实际用量折算，每百条' },
+      cost_new: { value: '¥0.1', source: '示例数据：轻量模型按量计费，每百条' },
+      cost_ratio: { value: '12 倍', source: '计算：cost_old ÷ cost_new' },
+      cost_flagship: { value: '$3–5', source: '示例数据：同一批内容用旗舰模型估算，每百条' },
+      q_raw: { value: '60 分', source: '示例数据：直接用 AI 翻译的抽样评分' },
+      q_gloss: { value: '70 分', source: '示例数据：加术语表后的抽样评分' },
+      q_role: { value: '80 分', source: '示例数据：再加角色提示词后的抽样评分' },
+      q_human: { value: '100 分', source: '评分基准：翻译同事的译文记为 100 分' },
+      q_test: { value: '87 分', source: '示例数据：30 条逐条对比打分的平均分' },
+      q_target: { value: '85 分', source: '目标：大批量生产时的稳定分数' },
+      sample: { value: '30 条', source: '示例数据：抽样对比的条数' },
+      worse: { value: '8 条', source: '示例数据：30 条里同事译文更好的条数' },
+      even: { value: '22 条', source: '计算：sample − worse' },
+    };
+
+    /* ================= 故事：每页高亮哪一段、讲什么 ================= */
+    const deck = {
+      title: 'AI 翻译提效',
+      subtitle: '多语言翻译链路 · 向上汇报',
+      icon: 'globe',
+      legend: ['req', 'push', 'write', 'fail'],
+      metricsBar: false, // 指标条只在总结页出现
+      model: MODEL,
+      facts: FACTS,
+      metrics: [
+        { key: 'cost', label: '每百条成本', icon: 'chart' },
+        { key: 'wait', label: '翻译等待 / 项目', icon: 'clock' },
+        { key: 'quality', label: '质量分', icon: 'target' },
+        { key: 'langs', label: '覆盖语言', icon: 'globe' },
+      ],
+      steps: [
+        /* ---------------- A. 业务流程 ---------------- */
+        {
+          short: '开场',
+          title: '把翻译链路里的一个环节交给 AI',
+          side: false,
+          legend: [],
+          cover: {
+            layout: 'split',
+            kicker: '多语言翻译流程 · AI 提效汇报',
+            title: '翻译成本<em>降一个数量级</em>，<br>项目不再等翻译',
+            subtitle: '把“人工从零翻译”换成“AI 先翻、人工审核”。<br>开发、产品、发布的流程都不变。',
+            stats: [
+              { label: '每百条翻译成本', value: '{cost_new}', from: '原来 {cost_old}' },
+              { label: '每个项目等翻译', value: '{wait_new}', unit: '天', from: '原来 {wait_old}' },
+              { label: '译文质量', value: '{q_test}', from: '人工译文为 {q_human}' },
+            ],
+            agenda: ['现在的流程', '改哪一段', '怎么改', '效果如何'],
+          },
+          metrics: { cost: '?', wait: '?', quality: '?', langs: '{langs}' },
+          notes: ['大家好，接下来用 10 到 15 分钟介绍一件事：在现有的翻译流程里，把其中一个环节交给 AI，做一次提效。', '先讲背景，再讲我们改了哪里、效果怎么样。'],
+          scene: { ...fanout(), camera: { at: [-11.4, -11.4], zoom: 1.25 } },
+        },
+        {
+          short: 'key',
+          badge: '背景',
+          title: '一个 key，对应十几种语言',
+          body: [
+            '页面上的每一段文字，开发都会给它定一个锚点，叫 **key**。',
+            '比如“确认”按钮，它的 key 下面挂着中文、英文、日语、韩语、泰语……**十几种语言**。不同国家的用户，看到的都是自己的母语。',
+          ],
+          callout: { kind: 'insight', text: '语言把人隔开，key + 多语言平台就是我们的“小巴别塔”。' },
+          notes: [
+            '页面上的每一段文字，开发都会给它定一个锚点，我们叫它 key。比如一个“确认”按钮，它的 key 下面挂着中文“确认”、英文“Confirm”，还有日语、韩语、泰语……十几种语言。',
+            '语言是把人隔开的一把刀，而 key 加上多语言平台，就是我们的“小巴别塔”。',
+          ],
+          scene: {
+            ...fanout(),
+            card: { title: 'key 是什么', icon: 'key', corner: 'auto', lines: ['一个 key = 页面上的一段文字', '下面挂着 **{langs} 种语言** 的译文', '= 用户切换语言，看到自己的母语'] },
+          },
+        },
+        {
+          short: '开发',
+          badge: '流程 ①',
+          title: '开发：定义 key 和示例文字',
+          body: ['链路的第一步在开发：根据需求文档，在页面上定好 **key**，并写好**示例文字**——这个按钮本来应该显示什么。', 'key 存在 **TMS 多语言平台** 的 key 表里。'],
+          changes: ['+ 开发定义 key', '+ TMS 平台 · key 表'],
+          notes: ['链路的第一步在开发。开发根据需求文档，在页面上定好 key，并写好示例文字，也就是这个按钮原本应该显示什么。'],
+          scene: {
+            entities: pick(['dev', 'tms', 'keys']),
+            links: pick(['dk']),
+            flows: [{ route: ['dk'], rate: 1.2, kind: 'write' }],
+            card: { title: 'key 表', icon: 'database', lines: ['btn.confirm → “确认”', 'btn.cancel  → “取消”', '# 其他十几种语言：还是空的'] },
+          },
+        },
+        {
+          short: '产品',
+          badge: '流程 ②',
+          title: '产品：向翻译侧提需求',
+          body: ['第二步，产品确认文案后，向翻译侧提需求：“这批 key 请帮忙翻译。”', '接需求的是**翻译负责人**——一个人对接平台所有项目。'],
+          changes: ['+ 产品提翻译需求', '+ 翻译负责人'],
+          notes: ['第二步，产品确认文案后，向翻译侧的同事提需求：“这批 key 请帮忙翻译。”'],
+          scene: {
+            entities: pick(['dev', 'tms', 'keys', 'pm', 'lead']),
+            links: pick(['dk', 'pr']),
+            flows: [{ route: ['pr'], rate: 1.2, kind: 'msg' }],
+            card: { title: '翻译需求', icon: 'message', lines: ['产品 → 翻译负责人', '“这批 key 请帮忙翻译”', '# 通过 IM / 文档沟通，在平台外'] },
+          },
+        },
+        {
+          short: '翻译',
+          badge: '流程 ③',
+          title: '翻译：平台外，从零开始',
+          body: ['第三步，翻译负责人把十几种语言拆给手下的**全职、兼职译员**。', '大家在平台外、在 **Excel** 里从零开始逐条翻译，负责人还要一个个去催进度。'],
+          changes: ['+ 全职 / 兼职译员', '+ Excel 里逐条翻译'],
+          notes: ['第三步，翻译负责人收到需求，把十几种语言拆给手下的全职、兼职译员。大家在平台外、在 Excel 里从零开始逐条翻译。'],
+          scene: {
+            entities: pick(['dev', 'tms', 'keys', 'pm', 'out', 'lead', 'staff', 'excel']),
+            links: pick(['dk', 'pr', 'ls', 'le']),
+            flows: [
+              { route: ['pr'], rate: 1, kind: 'msg' },
+              { route: ['ls'], rate: 2, kind: 'msg', bounce: true },
+              { route: ['le'], rate: 1.2, kind: 'write' },
+            ],
+            card: { title: '人工翻译', icon: 'users', lines: ['1 位负责人 + 多位全职 / 兼职译员', '按语言拆分，各自在 Excel 里翻', '~ 进度靠人催'] },
+          },
+        },
+        {
+          short: '回填',
+          badge: '流程 ④',
+          title: '回填到平台，再 @ 产品',
+          body: ['第四步，翻译完成后，Excel 里的结果要**回填**到 TMS 平台，再 @ 产品：“好了，可以用了。”'],
+          changes: ['+ Excel → 平台回填', '+ @ 产品确认'],
+          notes: ['第四步，翻译完成后，结果要再回填到 TMS 多语言平台里，然后 @ 产品：“好了，可以用了。”'],
+          scene: {
+            entities: pick(['dev', 'tms', 'keys', 'pm', 'out', 'lead', 'staff', 'excel']),
+            links: pick(['dk', 'pr', 'ls', 'le', 'bf']),
+            flows: [
+              { route: ['ls'], rate: 1.2, kind: 'msg', bounce: true },
+              { route: ['le', 'bf'], rate: 1.6, kind: 'write' },
+            ],
+            card: { title: '回填', icon: 'file', lines: ['Excel → 复制回 TMS 平台', '逐个语言核对、粘贴', '= 平台里的 key 才有了译文'] },
+          },
+        },
+        {
+          short: '发布',
+          badge: '流程 ⑤',
+          title: '发布：测试 → 预发 → 正式',
+          body: ['最后在平台里发布：先到**测试环境**，再到**预发环境**，最后到**正式环境**。', '上线后，各国用户切换语言，就能看到自己母语的界面。这就是完整的翻译链路。'],
+          changes: ['+ 测试 → 预发 → 正式', '+ 多国用户'],
+          notes: ['最后一步，在平台里发布：先到测试环境，再到预发环境，最后到正式环境。上线之后，各个国家的用户切换语言，就能看到自己母语的界面。', '这就是完整的翻译链路。'],
+          scene: {
+            entities: pick(OLD),
+            links: pick(OLD_LINKS),
+            flows: [
+              { route: ['le', 'bf'], rate: 1, kind: 'write' },
+              { route: ['p1', 'p2', 'p3', 'p4'], rate: 2.2, kind: 'push' },
+            ],
+            card: { title: '完整链路', icon: 'layers', lines: ['① 开发定义 key', '② 产品提需求', '③ 平台外人工翻译', '④ 回填平台', '⑤ 发布上线'] },
+          },
+        },
+
+        /* ---------------- B. 我们优化哪一段 ---------------- */
+        {
+          short: '优化点',
+          badge: '改哪里',
+          title: '我们只动第 ③④ 步',
+          body: [
+            '开发、产品、发布都**不动**。我们只改中间这一段：**平台外从零翻译 + Excel 回填**。',
+            '围绕这一段，回答三个问题：',
+            '**成本**能不能更低？**速度**能不能更快？前两个降下来，**质量**能不能守住？',
+          ],
+          callout: { kind: 'tip', text: '改动范围小：上下游的人和流程都不需要重新适应。' },
+          notes: ['这五步里，开发、产品、发布我们都没有动。我们只动中间这一段：平台外从零翻译，再用 Excel 回填。', '围绕这一段，我们想回答三个问题：成本能不能更低？速度能不能更快？前两个降下来的同时，质量能不能守住？'],
+          scene: {
+            entities: pick(OLD, {
+              dev: DIM, tms: DIM, pm: DIM, test: DIM, staging: DIM, prod: DIM, users: DIM,
+              out: { label: '优化范围', tint: 'red' },
+              lead: { tags: [{ text: '③ 从零翻译', tone: 'red', icon: 'target' }] },
+              excel: { tags: [{ text: '④ 回填', tone: 'red', icon: 'target' }] },
+            }),
+            links: pick(OLD_LINKS, muteAll(['dk', 'pr', 'p1', 'p2', 'p3', 'p4'])),
+            flows: [{ route: ['ls'], rate: 1.6, kind: 'msg', bounce: true }, { route: ['le', 'bf'], rate: 1.6, kind: 'write' }],
+            card: { title: '三个问题', icon: 'flag', lines: ['成本 能不能更低？', '速度 能不能更快？', '质量 能不能守住？'] },
+          },
+        },
+        {
+          short: '瓶颈',
+          badge: '为什么慢',
+          title: '瓶颈：一个人对接所有项目',
+          body: [
+            '平台分 **{groups}**，每组同时推进 **{projects}**，所有翻译需求都汇到翻译负责人这一个节点。',
+            '需求一多就排队：优先级高的先翻，低的往后放，再去催译员。每个项目在这一段通常要等**半天到一天**。',
+          ],
+          callout: { kind: 'warn', text: '不是谁不努力，而是单点排队：需求越多，等得越久。' },
+          metrics: { wait: '{wait_old}' },
+          notes: ['为什么慢？关键在翻译负责人这一个节点。我们平台分三个组，每组同时推进 3 到 5 个项目，所有翻译需求都汇到他这里。', '需求一多就要排队：优先级高的先翻，低的往后放，再去催全职、兼职的译员。每个项目在这一段的等待，通常是半天到一天。'],
+          scene: (() => {
+            const entities = {
+              pmA: block(9, -34, { h: 26, color: 'orange', glyph: 'user', label: ['A 组'], sub: '{projects}' }),
+              pm: block(16, -34, { h: 26, color: 'orange', glyph: 'user', label: ['B 组'], sub: '{projects}' }),
+              pmC: block(23, -34, { h: 26, color: 'orange', glyph: 'user', label: ['C 组'], sub: '{projects}' }),
+              out: E.out({ label: '' }),
+              lead: E.lead({ ...hot(1), tags: [{ text: '排队中', tone: 'red', icon: 'clock' }] }),
+              staff: E.staff(),
+              excel: E.excel(),
+            };
+            [13.4, 16, 18.6].forEach((x, i) => [-25, -22.6, -20.2].forEach((y, j) => {
+              entities[`q${i}${j}`] = block(x, y, { s: 1.5, h: 10, radius: 4, color: ['orange', 'yellow', 'gray'][(i + j) % 3], glyph: '' });
+            }));
+            return {
+              entities,
+              links: {
+                qa: link('pmA', 'lead', ['pmA', ['pmA', 'lead'], 'lead']),
+                qb: link('pm', 'lead'),
+                qc: link('pmC', 'lead', ['pmC', ['pmC', 'lead'], 'lead']),
+                ls: L.ls(),
+                le: L.le(),
+              },
+              flows: [
+                { route: ['qa'], rate: 1.8, kind: 'msg' },
+                { route: ['qb'], rate: 1.8, kind: 'msg' },
+                { route: ['qc'], rate: 1.8, kind: 'msg' },
+                { route: ['ls'], rate: 2.4, kind: 'msg', bounce: true },
+                { route: ['le'], rate: 0.6, kind: 'write' },
+              ],
+              card: { title: '单点排队', icon: 'clock', lines: ['{groups} × {projects}', '→ 全部汇到 1 位负责人', '~ 按优先级排队、逐个催', '= 每个项目等 {wait_old}'] },
+            };
+          })(),
+        },
+
+        /* ---------------- C. 方案 ---------------- */
+        {
+          short: '方案',
+          badge: '怎么做',
+          title: '把 AI 翻译放进平台',
+          body: [
+            '在现有的 TMS 平台里加一个 **AI 翻译工作流**：',
+            '准备好**术语表**，写好固定的**角色提示词**，一键从一种语言翻成其他 N 种语言。只翻空着的格子，一次最多 {batch}。',
+            '不用再拆给不同的人、再等回复，也不用 Excel 回填。',
+          ],
+          changes: ['+ 术语表 · 角色提示词 · AI 翻译', '- 平台外 Excel 翻译与回填', '~ 翻译同事：从“翻译”变成“审核”'],
+          notes: ['做法很简单：在现有的 TMS 平台里加一个 AI 翻译工作流。', '我们准备好一份术语表，写好一段固定的提示词，然后一键调用 AI，从一种语言直接翻成其他 N 种语言。只翻空着的格子，一次最多 {batch}，不需要再拆给不同的人、再等回复。'],
+          scene: {
+            entities: pick(['dev', 'tms', 'keys', 'pm', 'out', 'lead', 'gloss', 'prompt', 'ai', 'test', 'staging', 'prod', 'users'], {
+              lead: REVIEWER,
+              out: { label: '平台外 · 只剩审核' },
+            }),
+            links: pick(['dk', 'pr', 'rv', 'ka', 'ga', 'pa', 'ak', 'p1', 'p2', 'p3', 'p4'], { rv: { style: 'dashed' } }),
+            camera: { at: [-1, -13.5], zoom: 1.3 },
+            flows: [
+              { route: ['ka'], rate: 3.5, kind: 'req' },
+              { route: ['ga'], rate: 1.2, kind: 'heavy' },
+              { route: ['pa'], rate: 1.2, kind: 'heavy' },
+              { route: ['ak'], rate: 3.5, kind: 'write' },
+            ],
+            card: { title: 'AI 翻译工作流', icon: 'sparkles', corner: 'bl', lines: ['+ 术语表：行业专有名词', '+ 角色提示词：跨境电商场景', '+ 一键 A → N 种语言', '= 一分钟几十上百条，并发完成'] },
+          },
+        },
+        {
+          short: '两道关',
+          badge: '怎么兜底',
+          title: '两道关：机器校验 + 人工审核',
+          body: [
+            '**第一道：机器校验。**检查占位符和术语，不对就重试一次；还不对就**留空**，交给人翻。',
+            '**第二道：人工审核。**AI 译文写进平台时标成“**待审**”，翻译同事点“通过”才算数。',
+          ],
+          callout: { kind: 'insight', text: '发布的决定权仍然在人手里。AI 只负责起草。' },
+          changes: ['+ 自动校验：失败重试 {retry}，再失败留空', '+ 写回状态：待审', '+ 翻译同事点「通过」'],
+          notes: ['AI 翻完不会直接上线，中间有两道关。', '第一道是机器校验：占位符、术语对不对，不对就重试一次，还不对就留空，交给人来翻。', '第二道是人工审核：AI 的译文写进平台时标成“待审”，翻译同事点“通过”才算数。所以翻译同事的角色变了，从“从零翻译加回填”变成了“审核”。发布的决定权仍然在人手里。'],
+          beats: [
+            { say: '第一道：机器校验占位符和术语，不对就重试，还不对就留空。', focus: ['ai', 'check'], card: { title: '机器校验', icon: 'shield', lines: ['占位符、术语逐条检查', '失败重试 {retry}，再失败留空', '= 交给人来翻'] } },
+            { say: '第二道：译文标成“待审”，翻译同事点“通过”才算数。', focus: ['keys', 'lead'], card: { title: '人工审核', icon: 'check', lines: ['写回状态：待审', '翻译同事点「通过」', '= 发布权仍在人手里'] } },
+            { say: '两道关合起来：AI 起草，人做决定。' },
+          ],
+          scene: {
+            entities: pick(NEW, {
+              lead: { ...REVIEWER, tags: [{ text: '点「通过」', tone: 'green', icon: 'check' }] },
+              out: { label: '平台外 · 只剩审核' },
+              keys: { tags: [{ text: '待审', tone: 'orange' }] },
+            }),
+            links: pick(NEW_LINKS, { rv: { label: '' } }),
+            camera: { at: [-1, -13.5], zoom: 1.3 },
+            flows: [
+              { route: ['ka'], rate: 2.4, kind: 'req' },
+              { route: ['ac'], rate: 3, kind: 'write', bounce: false },
+              { route: ['ck'], rate: 2.6, kind: 'write' },
+              { route: ['ac'], rate: 0.5, kind: 'fail' },
+              { route: ['rv'], rate: 1.4, kind: 'push', bounce: true },
+            ],
+            card: { title: '两道关', icon: 'shield', corner: 'bl', lines: ['① 占位符 / 术语校验', '  失败重试 {retry}，再失败留空', '② 写回标“待审”', '  翻译同事点「通过」才算数', '= 发布权仍在人手里'] },
+          },
+        },
+        {
+          short: '先测',
+          badge: '额外收益',
+          title: '审核不再阻塞测试',
+          body: ['译文即使**还没审核**，测试环境也能先用起来。开发可以先测，翻译同事有空了再审、再修改。', '审核还在，只是不再卡住开发的测试。'],
+          callout: { kind: 'tip', text: '没有译文的格子会依次回退到英文、原文，页面不会出现空白。' },
+          notes: ['还有一个额外的好处：译文即使还没审核，测试环境也已经能先用起来。开发可以先测，翻译同事有空了再来审、再修改。审核还在，但不再卡住开发的测试。'],
+          scene: {
+            entities: pick(NEW, {
+              lead: { ...REVIEWER, tags: [{ text: '有空再审', tone: 'muted', icon: 'clock' }] },
+              out: { label: '平台外 · 只剩审核' },
+              keys: { tags: [{ text: '待审', tone: 'orange' }] },
+              test: { tags: [{ text: '先测起来', tone: 'green', icon: 'check' }] },
+              staging: DIM, prod: DIM, users: DIM,
+            }),
+            links: pick(NEW_LINKS, { rv: { style: 'dashed', label: '' }, ...muteAll(['p2', 'p3', 'p4']) }),
+            flows: [
+              { route: ['ka', 'ac', 'ck'], rate: 2, kind: 'write' },
+              { route: ['p1'], rate: 3, kind: 'push' },
+            ],
+            card: { title: '不阻塞测试', icon: 'monitor', lines: ['AI 译文写入（待审）', '→ 测试环境立刻可用', '→ 审核随后进行', '= 开发不用再等翻译'] },
+          },
+        },
+
+        /* ---------------- D. 效果 ---------------- */
+        {
+          short: '成本',
+          badge: '效果 · 成本',
+          title: '成本：每百条 {cost_old} → {cost_new}',
+          body: [
+            '翻译同事现在用的**现有工具**，按套餐折算、按实际用量算，每百条约 **{cost_old}**。',
+            '我们用 **DeepSeek V4 Flash**，每百条约 **{cost_new}**。一个数量级的差距，约省 **{cost_ratio}**。',
+            '作为对照：同一批内容用 **旗舰模型**，每百条约 **{cost_flagship}**。',
+          ],
+          metrics: { cost: '{cost_new}（原 {cost_old}）' },
+          notes: ['先看成本。翻译同事现在用的是一套现有工具，按套餐折算，实际每百条大约 1 块 2。', '我们用 DeepSeek V4 Flash，每百条大约 1 毛钱。一个数量级的差距，大约省了 {cost_ratio}。', '作为对照：同一批内容如果用 旗舰模型，大约要 3 到 5 美元。'],
+          scene: {
+            entities: {
+              c1: bar(-3.5, -3.5, 120, { color: 'orange', label: ['现方案'], sub: '套餐折算', tags: [{ text: '{cost_old} / 百条', tone: 'orange' }] }),
+              c2: bar(3.5, 3.5, 10, { color: 'green', label: ['AI'], tags: [{ text: 'DeepSeek · {cost_new} / 百条', tone: 'green' }] }),
+            },
+            card: {
+              title: '每百条成本', icon: 'chart',
+              bars: [{ label: '现有工具', value: 1.2, text: '{cost_old}', tone: 'orange' }, { label: 'DeepSeek', value: 0.1, text: '{cost_new}', tone: 'green' }],
+              lines: ['现有工具：套餐 + 实际用量折算', 'DeepSeek V4 Flash：按量计费', '对照：旗舰模型 约 {cost_flagship}', '= 约 {cost_ratio}'],
+            },
+          },
+        },
+        {
+          short: '时间',
+          badge: '效果 · 时间',
+          title: '时间：每个项目省下半天到一天',
+          body: [
+            '原来每个项目在翻译这一段要等**半天到一天**，时间主要花在分派、催进度和等回复上。',
+            '现在 AI 一分钟翻完几十上百条，**等待基本归零**。审核时间没有变，仍然由人来看。',
+          ],
+          callout: { kind: 'tip', text: '省掉的是“分派 + 等待 + 回填”，不是审核。' },
+          metrics: { wait: '{wait_new}（原 {wait_old}）' },
+          notes: ['再看时间。原来每个项目在翻译这一段要等半天到一天，时间主要花在催译员和等回复上。现在 AI 一分钟就能翻完几十上百条，这一段的等待基本归零。', '要说明的是：省掉的是分派、等待和回填的时间；审核的时间没有变，还是要人来看。'],
+          scene: {
+            entities: {
+              w1: bar(-7, -7, 100, { color: 'orange', label: ['原来'], sub: '等待', tags: [{ text: '{wait_old}', tone: 'orange', icon: 'clock' }] }),
+              r1: bar(-3, -3, 26, { color: 'blue', label: ['审核'] }),
+              w2: bar(3, 3, 4, { color: 'green', label: ['现在'], tags: [{ text: '等待 {wait_new}', tone: 'green', icon: 'zap' }] }),
+              r2: bar(7, 7, 26, { color: 'blue', label: ['审核'], tags: [{ text: '审核 · 不变', tone: 'blue', icon: 'check' }] }),
+            },
+            card: {
+              title: '每个项目的翻译等待', icon: 'clock',
+              bars: [{ label: '原来', value: 1, text: '{wait_old}', tone: 'orange' }, { label: '现在', value: 0.02, text: '{wait_new}', tone: 'green' }],
+              lines: ['- 分派、催进度、回填', '~ 审核时间不变', '+ 审核不再阻塞测试'],
+            },
+          },
+        },
+        {
+          short: '质量',
+          badge: '效果 · 质量',
+          title: '质量：一步步做到 {q_role}',
+          body: [
+            '成本和时间都降了，质量会不会也掉？一步步看：',
+            '直接用 AI：**{q_raw}**，意思对，但不够地道。加上行业**术语表**：**{q_gloss}**。再给它“跨境电商场景翻译”的**角色提示词**：**{q_role}**。',
+          ],
+          metrics: { quality: '80（目标）' },
+          notes: ['能量守恒：成本和时间都降了，质量会不会也跟着掉？我们一步步看。', '只要用 AI，直接翻也能拿到 {q_raw}：意思对，但不够地道。', '加上术语表，{q_gloss}：跨境电商有很多专有名词，比如退款、运费险，我们把经验沉淀成术语表喂给它。', '再给它一个角色：你是在做跨境电商场景的翻译。提示词约束好之后，{q_role}。'],
+          scene: {
+            entities: {
+              s60: bar(0, -8, 60, { color: 'gray', label: ['直接翻'], tags: [{ text: '{q_raw}', tone: 'muted' }] }),
+              s70: bar(0, -2, 70, { color: 'blue', label: ['+术语表'], tags: [{ text: '{q_gloss}', tone: 'blue' }] }),
+              s80: bar(0, 4, 80, { color: 'green', label: ['+角色'], sub: '提示词', tags: [{ text: '{q_role}', tone: 'green' }] }),
+            },
+            card: { title: '质量阶梯', icon: 'trendingUp', lines: ['直接用 AI → {q_raw}', '+ 行业术语表 → {q_gloss}', '+ 场景角色提示词 → {q_role}'] },
+          },
+        },
+        {
+          short: '实测',
+          badge: '效果 · 质量',
+          title: '实测：{q_test}',
+          body: [
+            '和翻译同事对齐，抽 **{sample}**逐条对比打分。以同事的译文为 {q_human}，AI 拿到 **{q_test}**。',
+            '{sample}里有 **{worse}**同事更好，扣分主要集中在“**运费险**”这类业务术语上——正好是术语表下一步要补的。',
+          ],
+          metrics: { quality: '{q_test}' },
+          notes: ['我们和翻译同事对齐，抽了 {sample}逐条对比打分。以同事的译文为 {q_human}，AI 拿到 {q_test}。', '{sample}里有 {worse}同事的更好，扣分主要集中在“运费险”这类业务术语上。'],
+          scene: {
+            entities: {
+              h100: bar(-3.5, -3.5, 100, { color: 'orange', label: ['翻译', '同事'], tags: [{ text: '{q_human}', tone: 'orange' }] }),
+              s80: bar(3.5, 3.5, 87, { color: 'green', label: ['AI'], sub: 'DeepSeek', tags: [{ text: '{q_test}', tone: 'green' }] }),
+              nt: note(4, -6, '{worse} / {sample}同事更优 · 多为“运费险”术语', { tone: 'paper', icon: 'search' }),
+            },
+            card: {
+              title: '{sample}对比打分', icon: 'target',
+              bars: [{ label: '翻译同事', value: 100, max: 100, text: '100', tone: 'orange' }, { label: 'AI', value: 87, max: 100, text: '87', tone: 'green' }],
+              lines: ['{even}持平或 AI 更好', '{worse}同事更好', '~ 主要扣分：“运费险”等业务术语'],
+            },
+          },
+        },
+        {
+          short: '二八',
+          badge: '取舍',
+          title: '为什么不追求 {q_human}',
+          body: [
+            '二八定则：从零做到 {q_role} 最容易，从 {q_role} 到 {q_human} 最难。',
+            '审核同事的每一次修改，都会沉淀成术语表和规则，再喂回给 AI，目标是大批量生产时稳定在 **{q_target}以上**。',
+            '再往上需要请当地资深、懂电商行业的母语者，成本很高。工程化提效追求的是**标准质量、规模化、稳定生产**。',
+          ],
+          callout: { kind: 'insight', text: '不追求最好，追求投入产出比（ROI）最高。' },
+          notes: ['能不能再高？可以。但二八定则告诉我们：从零做到 {q_role} 最容易，从 {q_role} 到 {q_human} 最难。', '接下来，审核同事的每一次修改，都会沉淀成术语表和规则，再喂回给 AI。{sample}抽样是 {q_test}，跑一段时间之后，目标是在大批量生产时也稳定在 {q_target}以上。', '再往上也做得到，比如请当地资深、做了很多年电商行业的母语者，但成本很高。做任何事都要看投入产出比。工程化提效追求的不是最好，而是标准的质量、规模化、稳定地生产。'],
+          scene: {
+            entities: {
+              s60: bar(0, -8, 60, { color: 'gray', label: ['直接翻'], dim: 1, tags: [{ text: '60', tone: 'muted' }] }),
+              s70: bar(0, -2, 70, { color: 'blue', label: ['+术语表'], dim: 1, tags: [{ text: '70', tone: 'muted' }] }),
+              s80: bar(0, 4, 80, { color: 'green', label: ['+角色'], sub: '提示词', dim: 1, tags: [{ text: '80', tone: 'muted' }] }),
+              s85: bar(0, 10, 85, { color: 'purple', label: ['+审核'], sub: '数据回流', tags: [{ text: '85+ 够用', tone: 'green', icon: 'check' }] }),
+              s100: bar(0, 16, 100, { color: 'gray', label: ['资深'], sub: '母语者', opacity: 0.5, tags: [{ text: '100 · 成本高', tone: 'muted' }] }),
+              fb: note(7, 6, '审核修改 → 沉淀为术语 / 规则', { tone: 'blue', icon: 'sparkles' }),
+            },
+            card: { title: '二八定则', icon: 'target', lines: ['从零到 {q_role}：最容易', '{q_role} → {q_human}：最难、最贵', '= 目标：稳定 {q_target}以上'] },
+          },
+        },
+        {
+          short: '总结',
+          badge: '总结',
+          title: '只改一段，三项都有结果',
+          body: [
+            '**流程：**只改“平台外翻译 + 回填”，开发、产品、发布不变。',
+            '**成本：**每百条 {cost_old} → {cost_new}，约 **{cost_ratio}**。',
+            '**时间：**每个项目省下 **{wait_old}** 等待，审核不再阻塞测试。',
+            '**质量：**实测 **{q_test}**，人工审核兜底，审核数据持续回流到 {q_target}以上。',
+          ],
+          callout: { kind: 'insight', text: '下一步：补“运费险”等业务术语，把审核修改自动沉淀进术语表。' },
+          metricsBar: true,
+          metrics: { cost: '{cost_new}（原 {cost_old}）', wait: '{wait_new}（原 {wait_old}）', quality: '{q_test}', langs: '{langs}' },
+          notes: ['总结一下：流程上，只改了“平台外翻译加回填”这一段，开发、产品、发布都不变；成本每百条从 1 块 2 降到 1 毛，约 {cost_ratio}；时间上，每个项目省掉半天到一天的等待，而且审核不再阻塞测试；质量 {q_test}，有人工审核兜底，后续用审核数据持续提升到 {q_target}以上。', '这就是我们在做的事情，谢谢大家。'],
+          scene: {
+            entities: pick(NEW, { lead: REVIEWER, out: { label: '平台外 · 只剩审核' } }),
+            links: pick(NEW_LINKS),
+            flows: [
+              { route: ['ka', 'ac', 'ck'], rate: 2.4, kind: 'write' },
+              { route: ['rv'], rate: 1, kind: 'push', bounce: true },
+              { route: ['p1', 'p2', 'p3', 'p4'], rate: 2.4, kind: 'push' },
+            ],
+          },
+        },
+      ],
+    };
+
+    window.app = IsoDeck.mount('#app', deck, { stage: { zoomMax: 2 } });
+  </script>
+</body>
+</html>

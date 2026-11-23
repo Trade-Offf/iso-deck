@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>系统讲解 · 动态图解</title>
+  <link rel="stylesheet" href="../engine/iso.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="../engine/iso-stage.js"></script>
+  <script src="../engine/iso-deck.js"></script>
+  <script>
+    // 系统讲解模板：全景导览（页内节拍逐块推近）→ 主流程 → 故障场景 → 总结。
+    // 等距坐标：+x 朝屏幕右下，+y 朝屏幕右上。相邻节点间隔 8–12 格。
+    const { block, db, crowd, zone, link, down } = Iso.h;
+
+    const model = {
+      entities: {
+        front: zone({ x0: -14, x1: 8, y0: -6, y1: 6 }, '入口', { tint: 'blue' }),
+        back: zone({ x0: 10, x1: 30, y0: -14, y1: 14 }, '后端', { tint: 'orange' }),
+        users: crowd({ x0: -12, x1: -6, y0: -3, y1: 3 }, 10, '用户'),
+        api: block(3, 0, { color: 'blue', glyph: 'shield', label: ['API'], sub: '入口' }),
+        svc: block(18, 0, { color: 'orange', glyph: 'server', label: ['核心服务'] }),
+        store: db(14, -10, { r: 1.7, h: 28, color: 'purple', glyph: 'database', label: '数据库' }),
+        ext: block(25, 8, { s: 3.4, color: 'green', glyph: 'globe', label: ['外部服务'] }),
+      },
+      links: {
+        ua: link('users', 'api', { label: '请求' }),
+        as: link('api', 'svc'),
+        sd: link('svc', 'store', { label: '读写' }),
+        se: link('svc', 'ext', { label: '调用' }),
+      },
+    };
+
+    const facts = {
+      timeout: { value: '3 秒', source: '在这里写出处：配置文件 / 监控面板' },
+    };
+
+    const ALL = Object.keys(model.entities);
+    const LINKS = Object.keys(model.links);
+
+    IsoDeck.mount('#app', {
+      title: '系统讲解',
+      subtitle: '新人入职 · 系统导览',
+      icon: 'layers',
+      model,
+      facts,
+      legend: ['req', 'write', 'fail'],
+      steps: [
+        {
+          short: '开场',
+          title: '这个系统由哪几块组成',
+          side: false,
+          legend: [],
+          cover: {
+            layout: 'split',
+            kicker: '系统导览',
+            title: '一次请求，<br>经过<em>哪几块</em>',
+            subtitle: '先看全景，再走主流程，最后看一个故障。',
+            agenda: ['全景', '主流程', '故障', '总结'],
+          },
+          notes: ['开场一句话：今天讲清楚这个系统。'],
+          scene: { entities: ALL, links: LINKS, camera: { at: [-4, -18], zoom: 0.95 } },
+        },
+        {
+          short: '全景',
+          badge: '全景',
+          title: '两块：入口和后端',
+          body: ['请求先到 **API**，再到**核心服务**，核心服务读写数据库、调用外部服务。'],
+          notes: ['先看全景，按请求走的顺序一块一块看。'],
+          beats: [
+            { say: '入口：用户的请求先到 API。', focus: ['users', 'api'] },
+            { say: '后端：核心服务读写数据库，调用外部服务。', focus: ['svc', 'store', 'ext'], zoom: 1.2 },
+            { say: '这就是全景。' },
+          ],
+          scene: { entities: ALL, links: LINKS },
+        },
+        {
+          short: '主流程',
+          badge: '主流程',
+          title: '一次正常请求',
+          body: ['API → 核心服务 → 数据库 / 外部服务。'],
+          notes: ['走一遍正常请求。'],
+          scene: {
+            entities: ALL,
+            links: LINKS,
+            flows: [{ route: ['ua', 'as'], rate: 2, kind: 'req' }, { route: ['sd'], rate: 1.4, kind: 'write' }, { route: ['se'], rate: 1.2, kind: 'req' }],
+            card: { title: '主流程', icon: 'zap', lines: ['① 进入 API', '② 核心服务处理', '③ 读写 / 调用'] },
+          },
+        },
+        {
+          short: '故障',
+          badge: '故障',
+          title: '外部服务超时：{timeout}',
+          body: ['外部服务 **{timeout}** 没返回就放弃，核心服务走降级逻辑。'],
+          notes: ['最常见的故障：外部服务超时。'],
+          scene: {
+            entities: { ...Object.fromEntries(ALL.map((k) => [k, true])), ext: down('超时') },
+            links: LINKS,
+            flows: [{ route: ['se'], rate: 1.2, kind: 'fail' }],
+            card: { title: '超时', icon: 'clock', lines: ['{timeout} 无返回', '→ 降级'] },
+          },
+        },
+        {
+          short: '总结',
+          badge: '总结',
+          title: '记住这几点',
+          body: ['写下你希望听众记住的两三件事。'],
+          notes: ['总结。'],
+          scene: { entities: ALL, links: LINKS, flows: [{ route: ['ua', 'as'], rate: 1.6, kind: 'req' }] },
+        },
+      ],
+    });
+  </script>
+</body>
+</html>

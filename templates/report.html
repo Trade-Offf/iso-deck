@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>流程提效汇报 · 动态图解</title>
+  <link rel="stylesheet" href="../engine/iso.css" />
+</head>
+<body>
+  <div id="app"></div>
+
+  <script src="../engine/iso-stage.js"></script>
+  <script src="../engine/iso-deck.js"></script>
+  <script>
+    // 汇报模板：现在的流程 → 改哪一段 → 怎么改 → 效果。把文字、节点和数字换成你的。
+    const { block, db, zone, link, hot } = Iso.h;
+
+    /* 流程模型：画面里有什么、谁连着谁。每页只按 id 引用，不重复写坐标 */
+    const model = {
+      entities: {
+        team: zone({ x0: -6, x1: 30, y0: -8, y1: 8 }, '现有流程', { tint: 'blue' }),
+        req: block(0, 0, { color: 'orange', glyph: 'user', label: ['需求方'], sub: '提需求' }),
+        hub: block(12, 0, { color: 'yellow', glyph: 'users', label: ['人工处理'], sub: '排队' }),
+        sheet: block(24, 0, { s: 3, h: 24, color: 'green', glyph: 'file', label: ['表格'], sub: '手工回填' }),
+        sys: db(12, 14, { r: 1.8, h: 30, color: 'purple', glyph: 'database', label: '业务系统' }),
+        ai: block(24, -12, { color: 'green', glyph: 'bot', label: ['AI'], sub: '自动处理' }),
+      },
+      links: {
+        a: link('req', 'hub', { label: '提需求' }),
+        b: link('hub', 'sheet', { label: '逐条处理' }),
+        c: link('sheet', 'sys', ['sheet', ['sheet', 'sys'], 'sys'], { style: 'dashed', label: '回填' }),
+        d: link('req', 'ai', { label: '一键提交' }),
+        e: link('ai', 'sys', { label: '写回 · 待审' }),
+        f: link('sys', 'hub', { heads: 'both', label: '审核' }),
+      },
+    };
+
+    /* 数字台账：页面上的每个数字都从这里取，用 {key} 引用，并写明出处 */
+    const facts = {
+      wait_old: { value: '2 天', source: '在这里写出处：谁统计的、什么时间段' },
+      wait_new: { value: '2 小时', source: '在这里写出处' },
+      cost_old: { value: '¥100', source: '在这里写出处' },
+      cost_new: { value: '¥20', source: '在这里写出处' },
+    };
+
+    IsoDeck.mount('#app', {
+      title: '流程提效',
+      subtitle: '向上汇报',
+      icon: 'layers',
+      model,
+      facts,
+      legend: ['req', 'write', 'push'],
+      steps: [
+        {
+          short: '开场',
+          title: '一句话说清楚结论',
+          side: false,
+          legend: [],
+          cover: {
+            layout: 'split',
+            kicker: '某某流程 · AI 提效汇报',
+            title: '等待从 {wait_old}<br>降到 <em>{wait_new}</em>',
+            subtitle: '只改中间一段，上下游流程不变。',
+            stats: [
+              { label: '每次等待', value: '{wait_new}', from: '原来 {wait_old}' },
+              { label: '每次成本', value: '{cost_new}', from: '原来 {cost_old}' },
+            ],
+            agenda: ['现在的流程', '改哪一段', '怎么改', '效果如何'],
+          },
+          notes: ['开场先说结论，再讲背景。'],
+          scene: { entities: ['team', 'req', 'hub', 'sheet', 'sys'], links: ['a', 'b', 'c'], camera: { at: [-2, -12], zoom: 1 } },
+        },
+        {
+          short: '现状',
+          badge: '流程',
+          title: '现在的流程',
+          body: ['需求方提需求，人工逐条处理，再手工回填到系统。'],
+          notes: ['先带大家过一遍现在的流程。'],
+          scene: {
+            entities: ['team', 'req', 'hub', 'sheet', 'sys'],
+            links: ['a', 'b', 'c'],
+            flows: [{ route: ['a', 'b', 'c'], rate: 1.4, kind: 'write' }],
+            card: { title: '现在', icon: 'layers', lines: ['① 提需求', '② 人工处理', '③ 手工回填'] },
+          },
+          beats: [
+            { say: '第一步：需求方提需求。', focus: ['req'] },
+            { say: '第二步：人工排队处理，这里最慢。', focus: ['hub'] },
+            { say: '第三步：手工回填到系统。', focus: ['sheet', 'sys'] },
+            { say: '整条链路就是这样。' },
+          ],
+        },
+        {
+          short: '改哪段',
+          badge: '改哪里',
+          title: '只动人工处理这一段',
+          body: ['上下游都**不动**，只改中间的人工处理和回填。'],
+          notes: ['我们只动中间这一段。'],
+          scene: {
+            entities: { team: true, req: { dim: 1 }, hub: { ...hot(1), tags: [{ text: '排队 {wait_old}', tone: 'red', icon: 'clock' }] }, sheet: true, sys: { dim: 1 } },
+            links: { a: { style: 'muted' }, b: true, c: true },
+            flows: [{ route: ['b', 'c'], rate: 1.6, kind: 'write' }],
+            card: { title: '瓶颈', icon: 'clock', lines: ['人工排队', '每次等 {wait_old}'] },
+          },
+        },
+        {
+          short: '怎么改',
+          badge: '怎么做',
+          title: '交给 AI，人只做审核',
+          body: ['需求直接交给 AI 处理，结果写回系统标成**待审**，人工点通过才算数。'],
+          changes: ['+ AI 自动处理', '- 手工回填', '~ 人工：从处理变成审核'],
+          notes: ['做法：AI 先处理，人来审核。'],
+          scene: {
+            entities: ['req', 'hub', 'sys', 'ai'],
+            links: ['d', 'e', 'f'],
+            flows: [{ route: ['d', 'e'], rate: 2.4, kind: 'req' }, { route: ['f'], rate: 1, kind: 'push', bounce: true }],
+            card: { title: '新流程', icon: 'sparkles', lines: ['+ AI 处理', '+ 写回待审', '= 人只做审核'] },
+          },
+        },
+        {
+          short: '效果',
+          badge: '效果',
+          title: '等待：{wait_old} → {wait_new}',
+          body: ['省掉的是排队和回填，审核时间不变。'],
+          notes: ['看效果。'],
+          scene: {
+            entities: {
+              before: block(-4, -4, { s: 3.2, h: 96, radius: 7, glyph: '', color: 'orange', label: ['原来'], tags: [{ text: '{wait_old}', tone: 'orange' }] }),
+              after: block(4, 4, { s: 3.2, h: 12, radius: 7, glyph: '', color: 'green', label: ['现在'], tags: [{ text: '{wait_new}', tone: 'green' }] }),
+            },
+            card: { title: '每次等待', icon: 'clock', lines: ['原来 {wait_old}', '现在 {wait_new}'] },
+          },
+        },
+        {
+          short: '总结',
+          badge: '总结',
+          title: '只改一段，结果都在这里',
+          body: ['**时间：**{wait_old} → {wait_new}', '**成本：**{cost_old} → {cost_new}'],
+          callout: { kind: 'insight', text: '下一步：写你的下一步。' },
+          notes: ['总结一下。谢谢大家。'],
+          scene: { entities: ['req', 'hub', 'sys', 'ai'], links: ['d', 'e', 'f'], flows: [{ route: ['d', 'e'], rate: 2, kind: 'write' }] },
+        },
+      ],
+    });
+  </script>
+</body>
+</html>
