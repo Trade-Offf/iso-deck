@@ -25,7 +25,7 @@ oil-studio 是一个 macOS 录屏剪辑工具，它的 Skill 能按剧本（Play
 
    ```bash
    node scripts/cli.mjs serve <deck目录> --port 4178                 # url 用 http://127.0.0.1:4178/
-   node scripts/cli.mjs serve . --port 4178                          # 示例：url 用 http://127.0.0.1:4178/examples/order-flow/
+   node scripts/cli.mjs serve . --port 4178                          # 示例：url 用 http://127.0.0.1:4178/examples/agent-autoloop/
    ```
 
 2. 生成剧本。每句口播（`notes` 的每个元素、每个节拍的 `say`）是一拍；翻页的那一拍先按 `→`，等 1.4 秒过渡，再按字数留出讲话时间（每字约 230 毫秒，最少 2.5 秒）。

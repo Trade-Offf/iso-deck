@@ -34,7 +34,7 @@ const BASE_MODEL = `{
   links: { ab: link('a', 'b', { label: '连' }), bc: link('b', 'c') },
 }`;
 
-for (const p of ['examples/ai-translation', 'examples/order-flow', 'templates/report.html', 'templates/system.html']) {
+for (const p of ['examples/ai-translation', 'examples/agent-autoloop', 'templates/report.html', 'templates/system.html']) {
   test(`${p} 校验无错误、无提醒`, () => {
     const r = validateDeck(loadDeck(join(ROOT, p)));
     assert.equal(r.errors, 0, JSON.stringify(r.issues, null, 1));
@@ -95,6 +95,16 @@ test('模型连线文字里硬写的数字也会被提醒', () => {
   assert.ok(r.issues.some((x) => /50 条/.test(x.msg)), JSON.stringify(r.issues));
 });
 
+test('人物气泡、卡片正文里硬写的数字也会被提醒', () => {
+  const r = validateDeck(deckFrom(`{ facts: { n: { value: '1', source: 's' } }, steps: [{ title: '{n}', notes: ['n'], scene: { entities: {
+    p: { type: 'figure', x: 0, y: 0, say: '等了 30 分钟' },
+    c: { type: 'card', x: 6, y: 0, title: '审批', lines: ['省 12 万'] },
+  } } }] }`));
+  const msgs = r.issues.map((x) => x.msg).join('\n');
+  assert.match(msgs, /30 分钟/);
+  assert.match(msgs, /12 万/);
+});
+
 test('比例悬殊的柱子会被提醒（坐标系被压扁）', () => {
   const r = validateDeck(deckFrom(`{ steps: [{ title: 'x', notes: ['n'], scene: {
     entities: { p: block(0, 0, { h: 292 }), q: block(5, 5, { h: 14 }), r: block(10, 10, { h: 1 }) },
@@ -130,7 +140,7 @@ test('findIssues：文字压在体块中心算遮挡，落在体块空角不算'
 
 test('build：单文件里没有本地 css/js 引用', () => {
   const out = join(tmp(), 'deck.html');
-  buildSingle(join(ROOT, 'examples/order-flow'), out);
+  buildSingle(join(ROOT, 'examples/agent-autoloop'), out);
   const html = readFileSync(out, 'utf8');
   assert.doesNotMatch(html, /<script\s+src=/);
   assert.doesNotMatch(html, /<link\s+rel="stylesheet"/);
@@ -152,8 +162,8 @@ test('new：复制模板和引擎，路径改成 ./engine/，并能通过校验'
 });
 
 test('playbook：第一拍先 open，每页和每个节拍各一拍', () => {
-  const { deck } = loadDeck(join(ROOT, 'examples/order-flow'));
-  const book = buildPlaybook(deck, { url: 'http://127.0.0.1:4178/examples/order-flow/', subtitles: true });
+  const { deck } = loadDeck(join(ROOT, 'examples/agent-autoloop'));
+  const book = buildPlaybook(deck, { url: 'http://127.0.0.1:4178/examples/agent-autoloop/', subtitles: true });
   assert.equal(book.beats[0].actions[0].action, 'open');
   const ids = book.beats.map((b) => b.id);
   assert.equal(new Set(ids).size, ids.length);

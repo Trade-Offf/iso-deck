@@ -13,9 +13,9 @@ const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 const BLURB = {
   'ai-translation': '向上汇报：把流程里的一段交给 AI，讲清改了哪、省了多少、质量守不守得住。',
-  'order-flow': '系统讲解：给新同事讲一次下单经过哪些服务，页内节拍逐块推近。',
+  'agent-autoloop': '项目拆解：图解卡兹克开源的 Agent-Autoloop，内容整理自其 X 长文。',
 };
-const ORDER = ['ai-translation', 'order-flow'];
+const ORDER = ['ai-translation', 'agent-autoloop'];
 
 export async function buildGallery({ posters = true } = {}) {
   mkdirSync(join(DOCS, 'posters'), { recursive: true });

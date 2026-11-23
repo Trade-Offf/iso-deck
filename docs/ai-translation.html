@@ -62,6 +62,14 @@
 @keyframes iso-pulse { 50% { opacity: .35; } }
 .iso-stage.is-paused .iso-pulse { animation-play-state: paused; }
 
+/* 人物呼吸、卡片悬浮、睡觉的 z */
+.iso-bob { animation: iso-bob 2.6s ease-in-out infinite; }
+.iso-float { animation: iso-bob 3.2s ease-in-out infinite; }
+.iso-zzz { animation: iso-zzz 2.2s ease-in-out infinite; }
+@keyframes iso-bob { 50% { transform: translateY(-1.6px); } }
+@keyframes iso-zzz { 0% { opacity: 0; transform: translateY(3px); } 40%, 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-5px); } }
+.iso-stage.is-paused .iso-bob, .iso-stage.is-paused .iso-float, .iso-stage.is-paused .iso-zzz { animation-play-state: paused; }
+
 /* 信息卡（HUD，屏幕坐标，不随相机缩放） */
 .iso-card {
   position: absolute; z-index: 2; max-width: 320px; padding: 12px 14px 12px;
@@ -239,11 +247,6 @@
 .dk-beats li.is-cur { color: #fdf8f1; }
 .dk-beats li.is-cur::marker { color: #fee7b8; }
 .dk-beat { font-style: normal; color: var(--iso-ink-2); }
-.dk-beats { margin: 4px 0 0; padding-left: 1.4em; color: #b9ad9f; }
-.dk-beats li { margin-bottom: 4px; transition: color .2s; }
-.dk-beats li.is-cur { color: #fdf8f1; }
-.dk-beats li.is-cur::marker { color: #fee7b8; }
-.dk-beat { font-style: normal; color: var(--iso-ink-2); }
 
 /* 指标条可按页隐藏：deck.metricsBar / step.metricsBar */
 .dk.dk--nometrics .dk-metrics { display: none; }
@@ -271,6 +274,8 @@
 .dk-stat .f { margin-top: 8px; font-size: 14px; color: var(--iso-ink-2); }
 .dk-agenda { display: flex; align-items: center; gap: 12px; margin-top: 30px; font-size: 14px; color: var(--iso-muted); }
 .dk-agenda span + span::before { content: "→"; margin-right: 12px; color: #c2b5a6; }
+.dk-credit { margin-top: 18px; font-size: 13px; line-height: 1.6; color: var(--iso-muted); }
+.dk-credit a { color: inherit; }
 .dk-cover.is-on .dk-cover__in > * { animation: dk-rise .7s cubic-bezier(.2, .8, .2, 1) both; }
 .dk-cover.is-on .dk-cover__in > :nth-child(2) { animation-delay: .08s; }
 .dk-cover.is-on .dk-cover__in > :nth-child(3) { animation-delay: .16s; }
@@ -578,6 +583,148 @@
     return { svg: svg ? `<g opacity="${R(e.opacity)}">${svg}</g>` : '', count: items.length, maxW };
   }
 
+  /** 对话气泡：尾巴尖落在 (ax, ay)，返回 { svg, box } */
+  function bubble(ax, ay, say, { tone = 'paper', side = 'right', size = 11.5 } = {}) {
+    const lines = Array.isArray(say) ? say : String(say).split('\n');
+    const t = TONES[tone] || TONES.paper;
+    const lh = size + 6;
+    const w = Math.max(...lines.map((s) => textWidth(s, size, 700))) + 22;
+    const h = lines.length * lh + 10;
+    const x = side === 'left' ? ax - w + 16 : ax - 16;
+    const y = ay - 10 - h;
+    const [ta, tb] = side === 'left' ? [x + w - 26, x + w - 12] : [x + 12, x + 26];
+    const r = Math.min(10, h / 2);
+    const d =
+      `M${R(x + r)},${R(y)} H${R(x + w - r)} Q${R(x + w)},${R(y)} ${R(x + w)},${R(y + r)} V${R(y + h - r)} Q${R(x + w)},${R(y + h)} ${R(x + w - r)},${R(y + h)} ` +
+      `H${R(tb)} L${R(ax)},${R(ay)} L${R(ta)},${R(y + h)} H${R(x + r)} Q${R(x)},${R(y + h)} ${R(x)},${R(y + h - r)} V${R(y + r)} Q${R(x)},${R(y)} ${R(x + r)},${R(y)} Z`;
+    const body = lines.map((s, i) => text(x + w / 2, y + 5 + lh * (i + 0.5) + size * 0.36, s, size, 700, t.fg)).join('');
+    return {
+      svg: `<g class="iso-say"><path d="${d}" transform="translate(0 2.6)" fill="${INK}"/><path d="${d}" fill="${t.bg}" stroke="${t.stroke}" stroke-width="1.5" stroke-linejoin="round"/>${body}</g>`,
+      box: [x - 2, y - 2, x + w + 2, ay + 4],
+    };
+  }
+
+  /* ---------- 人物与机器人 ---------- */
+  const SKIN = '#fde3c8';
+  const HAIR = '#3b342d';
+  const MOOD_LIGHT = { idle: '#b3d79f', work: '#f6b26b', sleep: '#cdc5bb', happy: '#7cc16f', ask: '#f6cd82', worry: '#ec9d89' };
+
+  function eyes(mood, cy, col, sw) {
+    const L = -4.2;
+    const Rx = 4.2;
+    const dot = (x, y, r = 1.7) => `<circle cx="${x}" cy="${R(y)}" r="${r}" fill="${col}"/>`;
+    const arc = (x, y, up) => `<path d="M${x - 2.2},${R(y)} q2.2,${up ? -2.6 : 2.4} 4.4,0" fill="none" stroke="${col}" stroke-width="${sw}" stroke-linecap="round"/>`;
+    if (mood === 'happy') return arc(L, cy + 0.6, true) + arc(Rx, cy + 0.6, true);
+    if (mood === 'sleep') return arc(L, cy, false) + arc(Rx, cy, false);
+    if (mood === 'work') return dot(L, cy + 1.2, 1.5) + dot(Rx, cy + 1.2, 1.5);
+    let s = dot(L, cy) + dot(Rx, cy);
+    const brow = (x, tilt) => `<path d="M${x - 2.2},${R(cy - 4 + tilt)} L${x + 2.2},${R(cy - 4 - tilt)}" stroke="${col}" stroke-width="${sw * 0.8}" stroke-linecap="round"/>`;
+    if (mood === 'ask') s += brow(L, 0.6) + brow(Rx, -0.6);
+    if (mood === 'worry') s += brow(L, -1) + brow(Rx, 1);
+    return s;
+  }
+  function mouth(mood, cy) {
+    const st = `fill="none" stroke="${INK}" stroke-width="1.5" stroke-linecap="round"`;
+    if (mood === 'happy') return `<path d="M-3.6,${R(cy - 0.6)} q3.6,4.6 7.2,0 Z" fill="#c25b45" stroke="${INK}" stroke-width="1.3" stroke-linejoin="round"/>`;
+    if (mood === 'work') return `<path d="M-2,${R(cy)} h4" ${st}/>`;
+    if (mood === 'sleep') return `<circle cy="${R(cy)}" r="1.2" fill="${INK}"/>`;
+    if (mood === 'ask') return `<circle cy="${R(cy)}" r="1.7" ${st}/>`;
+    if (mood === 'worry') return `<path d="M-2.6,${R(cy + 1)} q2.6,-2.2 5.2,0" ${st}/>`;
+    return `<path d="M-2.6,${R(cy - 0.4)} q2.6,2.2 5.2,0" ${st}/>`;
+  }
+  function moodFx(mood, hx, hy) {
+    if (mood === 'sleep')
+      return `<g class="iso-zzz" fill="${INK}" font-weight="800">${text(hx + 13, hy - 6, 'z', 9, 800)}${text(hx + 20, hy - 15, 'Z', 12, 800)}</g>`;
+    if (mood === 'ask')
+      return `<g><circle cx="${hx + 14}" cy="${hy - 9}" r="7.2" fill="#f6cd82" stroke="${INK}" stroke-width="1.4"/>${text(hx + 14, hy - 5.4, '?', 10.5, 800)}</g>`;
+    if (mood === 'happy')
+      return `<g fill="#f6cd82" stroke="${INK}" stroke-width="1.1" stroke-linejoin="round"><path d="M${hx + 15},${hy - 14} l1.5,3.6 3.6,1.5 -3.6,1.5 -1.5,3.6 -1.5,-3.6 -3.6,-1.5 3.6,-1.5 Z"/><path d="M${hx - 16},${hy - 6} l1,2.4 2.4,1 -2.4,1 -1,2.4 -1,-2.4 -2.4,-1 2.4,-1 Z"/></g>`;
+    if (mood === 'worry') return `<path d="M${hx + 12},${hy - 4} q-3.2,4.6 0,6.4 q3.2,-1.8 0,-6.4 Z" fill="#a9c5e8" stroke="${INK}" stroke-width="1.1"/>`;
+    return '';
+  }
+  const LAPTOP = `<g><path d="M-12,-6 L0,-1 L12,-6 L0,-11 Z" fill="#e8e2db" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>
+    <rect x="-10" y="-23" width="20" height="13.5" rx="2.4" fill="#cdc5bb" stroke="${INK}" stroke-width="1.5"/><circle cy="-16.2" r="1.8" fill="#fffaf2"/></g>`;
+  const GEAR = {
+    crown: `<path d="M-7,-52 L-7.6,-58.6 L-3.6,-55.4 L0,-60.6 L3.6,-55.4 L7.6,-58.6 L7,-52 Z" fill="#f6cd82" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>`,
+    headset: `<path d="M-12.6,-41 A12.6,12.6 0 0 1 12.6,-41" fill="none" stroke="${INK}" stroke-width="2.2"/><rect x="-15" y="-43" width="5" height="8" rx="2.4" fill="#a9c5e8" stroke="${INK}" stroke-width="1.3"/><path d="M-12,-36 q1,6 7,6.6" fill="none" stroke="${INK}" stroke-width="1.3"/>`,
+    glasses: `<g fill="none" stroke="${INK}" stroke-width="1.3"><circle cx="-4.2" cy="-38.6" r="3.2"/><circle cx="4.2" cy="-38.6" r="3.2"/><path d="M-1,-38.6 h2"/></g>`,
+  };
+
+  /** 人物（role: 'human'）或机器人（role: 'bot'），原点在脚下，向上画 */
+  function figureArt(e, c) {
+    const mood = e.mood || 'idle';
+    const bot = e.role === 'bot';
+    const puck = `<path d="M-17,-1 V2.2 A17,8.5 0 0 0 17,2.2 V-1 Z" fill="url(#iso-g-slab-side)" stroke="${INK}" stroke-width="1.5"/>
+      <ellipse cy="-1" rx="17" ry="8.5" fill="url(#iso-g-slab-top)" stroke="${INK}" stroke-width="1.5"/>`;
+    const torso = bot
+      ? `<path d="M-10.5,-3 V-21 Q-10.5,-28 -3.5,-28 H3.5 Q10.5,-28 10.5,-21 V-3 A10.5,3.6 0 0 1 -10.5,-3 Z" fill="url(#iso-g-${c}-side)" stroke="${INK}" stroke-width="1.7"/>
+         <circle cy="-14" r="3" fill="${MOOD_LIGHT[mood] || MOOD_LIGHT.idle}" stroke="${INK}" stroke-width="1.3"/>`
+      : `<path d="M-10,-3 V-19 A10,10 0 0 1 10,-19 V-3 A10,3.6 0 0 1 -10,-3 Z" fill="url(#iso-g-${c}-side)" stroke="${INK}" stroke-width="1.7"/>
+         <path d="M-4.5,-28 L0,-22.5 L4.5,-28" fill="none" stroke="${INK}" stroke-width="1.3" stroke-linejoin="round" opacity=".55"/>`;
+    const sheen = `<path d="M-6.6,-6 V-17" stroke="#fff" stroke-opacity=".55" stroke-width="2.2" stroke-linecap="round"/>`;
+    let head;
+    let hy;
+    if (bot) {
+      hy = -41;
+      head = `<path d="M0,-51 V-56" stroke="${INK}" stroke-width="1.5"/><circle cy="-58" r="2.6" fill="${MOOD_LIGHT[mood] || MOOD_LIGHT.idle}" stroke="${INK}" stroke-width="1.3"/>
+        <rect x="-15" y="-45" width="3.6" height="8" rx="1.6" fill="url(#iso-g-${c}-side)" stroke="${INK}" stroke-width="1.2"/>
+        <rect x="11.4" y="-45" width="3.6" height="8" rx="1.6" fill="url(#iso-g-${c}-side)" stroke="${INK}" stroke-width="1.2"/>
+        <rect x="-12.4" y="-51.5" width="24.8" height="21" rx="7" fill="url(#iso-g-${c}-top)" stroke="${INK}" stroke-width="1.7"/>
+        <rect x="-8.8" y="-47.6" width="17.6" height="13" rx="4" fill="#2b2622"/>
+        ${eyes(mood, hy, '#c9f0b4', 1.6)}`;
+    } else {
+      hy = -38.6;
+      head = `<circle cy="-38" r="11.6" fill="${SKIN}" stroke="${INK}" stroke-width="1.7"/>
+        <path d="M-11.6,-38.6 A11.6,11.6 0 0 1 11.6,-38.6 Q7,-44.6 -1,-43 Q-7.6,-41.8 -11.6,-38.6 Z" fill="${HAIR}" stroke="${INK}" stroke-width="1.4" stroke-linejoin="round"/>
+        <ellipse cx="-6.8" cy="-33" rx="2.2" ry="1.3" fill="#f3a38c" opacity=".6"/><ellipse cx="6.8" cy="-33" rx="2.2" ry="1.3" fill="#f3a38c" opacity=".6"/>
+        ${eyes(mood, hy + 2.4, INK, 1.5)}${mouth(mood, -32)}`;
+    }
+    const gear = (e.gear && GEAR[e.gear]) || '';
+    return `${puck}<g class="iso-bob">${torso}${sheen}${head}${gear}${mood === 'work' ? LAPTOP : ''}${moodFx(mood, 0, -50)}</g>`;
+  }
+
+  /* ---------- 立起来的界面卡片（审批卡、通知） ---------- */
+  function cardArt(e) {
+    const t = TONES[e.tone] || TONES.blue;
+    const lines = e.lines || [];
+    const btns = e.buttons || [];
+    const tw = textWidth(e.title || '', 12.5, 800) + (e.icon ? 20 : 0);
+    const lw = Math.max(0, ...lines.map((s) => textWidth(s, 11, 600)));
+    const bws = btns.map((b, i) => textWidth(b, 11, 700) + (i === e.pick ? 32 : 20));
+    const bw = bws.reduce((s, w) => s + w, 0) + Math.max(0, btns.length - 1) * 6;
+    const W = e.w || Math.max(150, tw, lw, bw) + 26;
+    const H = 30 + 8 + lines.length * 17 + (btns.length ? 32 : 0) + 6;
+    const x = -W / 2;
+    const y = -H;
+    let s = `<rect x="${R(x)}" y="${R(y + 3)}" width="${R(W)}" height="${R(H)}" rx="10" fill="${INK}"/>
+      <rect x="${R(x)}" y="${R(y)}" width="${R(W)}" height="${R(H)}" rx="10" fill="#fffaf2" stroke="${INK}" stroke-width="1.6"/>
+      <path d="M${R(x + 10)},${R(y + 0.8)} H${R(x + W - 10)} Q${R(x + W - 0.8)},${R(y + 0.8)} ${R(x + W - 0.8)},${R(y + 10)} V${R(y + 30)} H${R(x + 0.8)} V${R(y + 10)} Q${R(x + 0.8)},${R(y + 0.8)} ${R(x + 10)},${R(y + 0.8)} Z" fill="${t.bg}"/>
+      <path d="M${R(x)},${R(y + 30)} H${R(x + W)}" stroke="${INK}" stroke-width="1.2" stroke-opacity=".35"/>`;
+    let hx = x + 12;
+    if (e.icon) {
+      s += icon(e.icon, hx + 7, y + 15, 14, { stroke: t.fg, sw: 2.1 });
+      hx += 20;
+    }
+    s += `<text x="${R(hx)}" y="${R(y + 19.5)}" font-size="12.5" font-weight="800" fill="${t.fg}">${esc(e.title || '')}</text>`;
+    lines.forEach((l, i) => {
+      s += `<text x="${R(x + 12)}" y="${R(y + 30 + 8 + 12 + i * 17)}" font-size="11" font-weight="600" fill="#3b342d">${esc(l)}</text>`;
+    });
+    let bx = x + 12;
+    const by = y + 30 + 8 + lines.length * 17 + 6;
+    btns.forEach((b, i) => {
+      const on = i === e.pick;
+      const off = e.pick != null && e.pick >= 0 && !on;
+      const w = bws[i];
+      s += `<g opacity="${off ? 0.45 : 1}"><rect x="${R(bx)}" y="${R(by)}" width="${R(w)}" height="21" rx="6" fill="${on ? '#e2f2d7' : '#fffaf2'}" stroke="${on ? '#2f6b2a' : INK}" stroke-width="1.3"/>` +
+        (on ? icon('check', bx + 11, by + 10.5, 11, { stroke: '#2f6b2a', sw: 2.6 }) : '') +
+        `<text x="${R(bx + (on ? 20 : 10))}" y="${R(by + 14.5)}" font-size="11" font-weight="700" fill="${on ? '#2f6b2a' : INK}">${esc(b)}</text></g>`;
+      bx += w + 6;
+    });
+    if (e.stamp)
+      s += `<g transform="translate(${R(x + W - 30)} ${R(y + H - 26)}) rotate(-14)" opacity=".9"><circle r="19" fill="none" stroke="#c0392b" stroke-width="2"/><circle r="15.5" fill="none" stroke="#c0392b" stroke-width="1"/>${text(0, 4.5, e.stamp, 12.5, 800, '#c0392b')}</g>`;
+    return { svg: s, W, H };
+  }
+
   /* ---------- 实体形状 ---------- */
   const DEFAULTS = {
     block: { s: 4, h: 40, color: 'blue', glyph: 'server', label: [], sub: '', cpu: -1, heat: 0, dead: 0, dim: 0, lift: 0, opacity: 1, tags: [], pills: 'above', radius: 9 },
@@ -585,9 +732,13 @@
     crowd: { count: 0, label: '', icon: 'users', color: 'slab', lift: 0, opacity: 1, dim: 0 },
     zone: { label: '', tint: '', opacity: 1, dim: 0 },
     note: { text: '', tone: 'paper', icon: '', size: 10.5, z: 0, lift: 0, opacity: 1, dim: 0 },
+    figure: { role: 'human', mood: 'idle', gear: '', color: 'blue', s: 1.6, label: '', sub: '', say: '', sayTone: 'paper', saySide: 'right', lift: 0, opacity: 1, dim: 0, tags: [] },
+    say: { text: '', tone: 'paper', side: 'right', size: 11.5, z: 0, lift: 0, opacity: 1, dim: 0 },
+    card: { title: '', icon: '', lines: [], buttons: [], pick: -1, stamp: '', tone: 'blue', z: 36, face: 'left', lift: 0, opacity: 1, dim: 0 },
+    doc: { s: 4, n: 3, title: '', rows: 3, label: '', sub: '', glyph: '', lift: 0, opacity: 1, dim: 0, tags: [] },
   };
-  const ENTER_FROM = { block: { lift: 120 }, db: { lift: 120 }, crowd: { count: 0, lift: 26 }, zone: {}, note: { lift: -14 } };
-  const EXIT_TO = { block: { lift: -22 }, db: { lift: -22 }, crowd: { count: 0 }, zone: {}, note: { lift: -10 } };
+  const ENTER_FROM = { block: { lift: 120 }, db: { lift: 120 }, crowd: { count: 0, lift: 26 }, zone: {}, note: { lift: -14 }, figure: { lift: 70 }, say: { lift: -12 }, card: { lift: 40 }, doc: { lift: 60 } };
+  const EXIT_TO = { block: { lift: -22 }, db: { lift: -22 }, crowd: { count: 0 }, zone: {}, note: { lift: -10 }, figure: { lift: -16 }, say: { lift: -8 }, card: { lift: -16 }, doc: { lift: -16 } };
 
   const spotCache = new Map();
   const hash = (a, b) => {
@@ -759,7 +910,102 @@
         bounds: [x - ps.w / 2 - 4, y - ps.h / 2 - 4, x + ps.w / 2 + 4, y + ps.h / 2 + 4],
       };
     },
+
+    figure(e) {
+      const k = e.s;
+      const [gx, gy] = iso(e.x, e.y);
+      const py = gy - e.lift;
+      const c = PALETTE[e.color] ? e.color : 'blue';
+      const a = 1 - Math.min(1, Math.max(0, e.lift) / 140) * 0.85;
+      const op = e.opacity * (1 - e.dim * 0.5);
+      let lab = '';
+      if (e.label) lab += text(gx, py + 22 * k, e.label, 12.5, 800);
+      if (e.sub) lab += text(gx, py + 22 * k + (e.label ? 14 : 0), e.sub, 10, 600, '#6b6259');
+      const body = `<g opacity="${R(op)}">
+        <ellipse cx="${R(gx)}" cy="${R(gy + 3)}" rx="${R(18 * k)}" ry="${R(7 * k)}" fill="#6b5236" opacity="${R(0.24 * a)}" filter="url(#iso-blur-lg)"/>
+        <g transform="translate(${R(gx)} ${R(py)}) scale(${R(k)})">${figureArt(e, c)}</g>
+        <g opacity="${R(e.labelFade ?? 1)}">${lab}</g></g>`;
+      const top = py - 62 * k;
+      const stack = pillStack(gx, top - 4, -1, e);
+      let over = stack.svg;
+      let sayBox = null;
+      if (e.say) {
+        const sb = bubble(gx + (e.saySide === 'left' ? -10 : 10) * k, top - stack.count * 26 + 4, e.say, { tone: e.sayTone, side: e.saySide });
+        over += `<g opacity="${R(op * (e.tagFade ?? 1))}">${sb.svg}</g>`;
+        sayBox = sb.box;
+      }
+      const poly = [[-17, 0], [-12, -32], [0, -60], [12, -32], [17, 0], [0, 9]].map(([x, y]) => [gx + x * k, py + y * k]);
+      const labW = Math.max(e.label ? textWidth(e.label, 12.5, 800) : 0, e.sub ? textWidth(e.sub, 10, 600) : 0);
+      let bounds = widenBox(bbox(poly, [6, 6 + stack.count * 26, 6, 6 + (e.label ? 18 : 0) + (e.sub ? 14 : 0)]), Math.max(stack.maxW, labW) + 8);
+      if (sayBox) bounds = unionBox(bounds, sayBox);
+      return { body, over, poly, bounds };
+    },
+
+    say(e) {
+      const [x, y] = iso(e.x, e.y, e.z + e.lift);
+      const sb = bubble(x, y, e.text, e);
+      return { body: '', over: `<g opacity="${R(e.opacity * (1 - e.dim * 0.6))}">${sb.svg}</g>`, poly: null, bounds: sb.box };
+    },
+
+    card(e) {
+      const [gx, gy] = iso(e.x, e.y);
+      const ay = gy - e.z - e.lift;
+      const { svg, W, H } = cardArt(e);
+      const sk = e.face === 'right' ? -0.5 : e.face === 'screen' ? 0 : 0.5;
+      const corners = [[-W / 2, -H], [W / 2, -H], [W / 2, 3], [-W / 2, 3]].map(([x, y]) => [gx + x, ay + y + x * sk]);
+      const a = 1 - Math.min(1, Math.max(0, e.lift) / 140) * 0.85;
+      const body = `<g opacity="${R(e.opacity * (1 - e.dim * 0.5))}">
+        <ellipse cx="${R(gx)}" cy="${R(gy)}" rx="${R(W * 0.34)}" ry="${R(W * 0.12)}" fill="#6b5236" opacity="${R(0.2 * a)}" filter="url(#iso-blur-lg)"/>
+        <path d="M${R(gx)},${R(gy)} V${R(ay)}" stroke="${INK}" stroke-width="1.2" stroke-dasharray="2 4" stroke-opacity=".45"/>
+        <g class="iso-float"><g transform="matrix(1 ${sk} 0 1 ${R(gx)} ${R(ay)})">${svg}</g></g></g>`;
+      const poly = [iso(e.x - 1.4, e.y - 1.4), iso(e.x + 1.4, e.y - 1.4), iso(e.x + 1.4, e.y + 1.4), iso(e.x - 1.4, e.y + 1.4)];
+      return { body, over: '', poly, bounds: bbox([...corners, [gx, gy + 6]], [6, 6, 6, 6]) };
+    },
+
+    doc(e) {
+      const t = e.s / 2;
+      const [cx, cy] = iso(e.x, e.y, e.lift);
+      const half = 7 * e.s;
+      const M = `matrix(1 .5 -1 .5 ${R(cx)} ${R(cy)})`;
+      const ns = 'vector-effect="non-scaling-stroke"';
+      const sheet = (dy, top) =>
+        `<g transform="translate(${R(((dy * 7) % 5) - 2)} ${R(-dy)})"><g transform="translate(0 2.6)"><g transform="${M}"><rect x="${-half}" y="${-half}" width="${2 * half}" height="${2 * half}" rx="3" fill="#e3d7c8" stroke="${INK}" stroke-width="1.4" ${ns}/></g></g>` +
+        `<g transform="${M}"><rect x="${-half}" y="${-half}" width="${2 * half}" height="${2 * half}" rx="3" fill="${top ? '#fffdf8' : '#f7f0e7'}" stroke="${INK}" stroke-width="1.4" ${ns}/>${top || ''}</g></g>`;
+      let rows = '';
+      const y0 = e.title ? -half + 14 : -half + 7;
+      for (let i = 0; i < e.rows; i++) {
+        const w = (2 * half - 12) * (0.55 + 0.4 * hash(i + 3, e.x));
+        rows += `<rect x="${-half + 6}" y="${R(y0 + i * 6)}" width="${R(w)}" height="2.6" rx="1.3" fill="#cdbfae"/>`;
+      }
+      const title = e.title ? `<text x="${-half + 6}" y="${-half + 10}" font-size="7.5" font-weight="800" fill="${INK}">${esc(e.title)}</text>` : '';
+      let sheets = '';
+      for (let i = 0; i < e.n; i++) sheets += sheet(i * 3, i === e.n - 1 ? title + rows : '');
+      const B = iso(e.x + t, e.y - t, e.lift);
+      let lab = '';
+      if (e.label) lab += text(cx, B[1] + 18, e.label, 12, 800);
+      if (e.sub) lab += text(cx, B[1] + (e.label ? 32 : 18), e.sub, 10, 600, '#6b6259');
+      const a = 1 - Math.min(1, Math.max(0, e.lift) / 140) * 0.85;
+      const outline = [iso(e.x - t, e.y + t), iso(e.x + t, e.y + t), iso(e.x + t, e.y - t), iso(e.x - t, e.y - t)];
+      const body = `<g opacity="${R(e.opacity * (1 - e.dim * 0.5))}">
+        <path d="${roundPoly(outline.map(([x, y]) => [x, y + 3]), 4)}" fill="#6b5236" opacity="${R(0.22 * a)}" filter="url(#iso-blur-lg)"/>
+        ${sheets}${e.glyph ? icon(e.glyph, cx + half * 0.6, cy - (e.n - 1) * 3 - half * 0.3, 14) : ''}
+        <g opacity="${R(e.labelFade ?? 1)}">${lab}</g></g>`;
+      const poly = outline.map(([x, y]) => [x, y - e.lift - (e.n - 1) * 3]);
+      const stack = pillStack(cx, poly[0][1] - 14, -1, e);
+      const labW = Math.max(e.label ? textWidth(e.label, 12, 800) : 0, e.sub ? textWidth(e.sub, 10, 600) : 0);
+      const bounds = widenBox(bbox([...outline, ...poly], [6, 6 + stack.count * 26, 6, 6 + (e.label ? 18 : 0) + (e.sub ? 14 : 0)]), Math.max(stack.maxW, labW) + 8);
+      return { body, over: stack.svg, poly, bounds };
+    },
   };
+
+  /** 任意实体都能带 say 气泡；人物自己画，其余挂在顶上 */
+  function shapeOf(e) {
+    const s = SHAPES[e.type](e);
+    if (!e.say || e.type === 'figure' || e.type === 'say') return s;
+    const sb = bubble((s.bounds[0] + s.bounds[2]) / 2 + 8, s.bounds[1] + 6, e.say, { tone: e.sayTone, side: e.saySide });
+    const op = (e.opacity ?? 1) * (1 - (e.dim || 0) * 0.5) * (e.tagFade ?? 1);
+    return { ...s, over: `${s.over || ''}<g opacity="${R(op)}">${sb.svg}</g>`, bounds: unionBox(s.bounds, sb.box) };
+  }
 
   function normalize(e) {
     const n = { ...(DEFAULTS[e.type] || {}), ...e };
@@ -769,10 +1015,11 @@
   }
   const normalizeAll = (ents) => Object.fromEntries(Object.entries(ents || {}).map(([id, e]) => [id, normalize(e)]));
   const center = (e) => (e.type === 'crowd' || e.type === 'zone' ? [(e.x0 + e.x1) / 2, (e.y0 + e.y1) / 2] : [e.x, e.y]);
-  const depth = (e) => (e.type === 'zone' ? -1e4 : e.type === 'note' ? 1e4 : center(e)[0] - center(e)[1]);
+  const FLOAT = new Set(['note', 'say']);
+  const depth = (e) => (e.type === 'zone' ? -1e4 : FLOAT.has(e.type) ? 1e4 : center(e)[0] - center(e)[1]);
   function footprint(e) {
     if (e.type === 'crowd' || e.type === 'zone') return [e.x0, e.x1, e.y0, e.y1];
-    const t = e.type === 'db' ? e.r : (e.s || 4) / 2;
+    const t = e.type === 'db' ? e.r : e.type === 'figure' ? 0.7 * e.s : e.type === 'card' ? 1.4 : (e.s || 4) / 2;
     return [e.x - t, e.x + t, e.y - t, e.y + t];
   }
 
@@ -1010,7 +1257,7 @@
       const polys = {};
       let b = [Infinity, Infinity, -Infinity, -Infinity];
       for (const [id, e] of Object.entries(ents)) {
-        const s = SHAPES[e.type](e);
+        const s = shapeOf(e);
         polys[id] = s.poly;
         boxes.push(s.bounds);
         if (e.type !== 'zone') solid.push(s.bounds);
@@ -1279,7 +1526,7 @@
         if (ent.cur.type === 'zone' || ent.cur.opacity < 0.05) continue;
         const body = rel(ent.el);
         const dim = ent.cur.dim > 0.5 || undefined;
-        if (body) boxes.push({ id, kind: ent.cur.type === 'note' ? 'note' : 'entity', type: ent.cur.type, box: body, dim });
+        if (body) boxes.push({ id, kind: FLOAT.has(ent.cur.type) ? 'note' : 'entity', type: ent.cur.type, box: body, dim });
         const over = ent.overEl.childNodes.length ? rel(ent.overEl) : null;
         if (over) boxes.push({ id, kind: 'pills', box: over, dim });
       }
@@ -1354,10 +1601,10 @@
     }
 
     renderEntity(ent) {
-      const s = SHAPES[ent.cur.type](ent.cur);
+      const s = shapeOf(ent.cur);
       ent.el.innerHTML = s.body;
       ent.overEl.innerHTML = s.over || '';
-      ent.overEl.style.opacity = ent.cur.type !== 'note' && ent.cur.dim > 0.01 ? R(1 - ent.cur.dim * 0.55) : '';
+      ent.overEl.style.opacity = !FLOAT.has(ent.cur.type) && ent.cur.dim > 0.01 ? R(1 - ent.cur.dim * 0.55) : '';
       ent.poly = s.poly;
       ent.bounds = s.bounds;
     }
@@ -1370,7 +1617,7 @@
 
     spotlight(id) {
       const ent = this.ents.get(id);
-      if (!ent || ['zone', 'note'].includes(ent.cur.type)) return;
+      if (!ent || ent.cur.type === 'zone' || FLOAT.has(ent.cur.type)) return;
       const [x0, x1, y0, y1] = footprint(ent.cur);
       const o = 0.6;
       const path = svgEl('path', {
@@ -1666,6 +1913,10 @@
     crowd: (rect, count, label, o = {}) => ({ type: 'crowd', ...rect, count, label, ...o }),
     zone: (rect, label, o = {}) => ({ type: 'zone', ...rect, label, ...o }),
     note: (x, y, text, o = {}) => ({ type: 'note', x, y, text, ...o }),
+    figure: (x, y, o = {}) => ({ type: 'figure', x, y, ...o }),
+    say: (x, y, text, o = {}) => ({ type: 'say', x, y, text, ...o }),
+    card: (x, y, o = {}) => ({ type: 'card', x, y, ...o }),
+    doc: (x, y, o = {}) => ({ type: 'doc', x, y, ...o }),
     /** link(from, to) / link(from, to, pts) / link(from, to, opts) / link(from, to, pts, opts) */
     link: (from, to, pts, o) => {
       if (pts && !Array.isArray(pts)) [o, pts] = [pts, undefined];
@@ -2076,7 +2327,7 @@
           .join('');
         const agenda = (c.agenda || []).map((a) => `<span>${esc(a)}</span>`).join('');
         cover.className = `dk-cover${c.layout ? ` dk-cover--${c.layout}` : ''}`;
-        cover.innerHTML = `<div class="dk-cover__in">${c.kicker ? `<div class="k">${esc(c.kicker)}</div>` : ''}<h2>${md(c.title || '')}</h2>${c.subtitle ? `<p>${md(c.subtitle)}</p>` : ''}${stats ? `<div class="dk-stats">${stats}</div>` : ''}${agenda ? `<div class="dk-agenda">${agenda}</div>` : ''}</div>`;
+        cover.innerHTML = `<div class="dk-cover__in">${c.kicker ? `<div class="k">${esc(c.kicker)}</div>` : ''}<h2>${md(c.title || '')}</h2>${c.subtitle ? `<p>${md(c.subtitle)}</p>` : ''}${stats ? `<div class="dk-stats">${stats}</div>` : ''}${agenda ? `<div class="dk-agenda">${agenda}</div>` : ''}${c.credit ? `<div class="dk-credit">${md(c.credit)}</div>` : ''}</div>`;
         void cover.offsetWidth;
         cover.classList.add('is-on');
       } else cover.classList.remove('is-on');

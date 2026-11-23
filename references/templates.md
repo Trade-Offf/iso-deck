@@ -27,7 +27,7 @@
 
 ## system：系统讲解 / 新人入职
 
-对应 `templates/system.html`，完整示例 `examples/order-flow`。
+对应 `templates/system.html`，完整示例 `examples/agent-autoloop`。
 
 | 段落 | 页数 | 画面 |
 | --- | --- | --- |

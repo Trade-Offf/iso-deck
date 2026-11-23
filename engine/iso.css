@@ -55,6 +55,14 @@
 @keyframes iso-pulse { 50% { opacity: .35; } }
 .iso-stage.is-paused .iso-pulse { animation-play-state: paused; }
 
+/* 人物呼吸、卡片悬浮、睡觉的 z */
+.iso-bob { animation: iso-bob 2.6s ease-in-out infinite; }
+.iso-float { animation: iso-bob 3.2s ease-in-out infinite; }
+.iso-zzz { animation: iso-zzz 2.2s ease-in-out infinite; }
+@keyframes iso-bob { 50% { transform: translateY(-1.6px); } }
+@keyframes iso-zzz { 0% { opacity: 0; transform: translateY(3px); } 40%, 70% { opacity: 1; } 100% { opacity: 0; transform: translateY(-5px); } }
+.iso-stage.is-paused .iso-bob, .iso-stage.is-paused .iso-float, .iso-stage.is-paused .iso-zzz { animation-play-state: paused; }
+
 /* 信息卡（HUD，屏幕坐标，不随相机缩放） */
 .iso-card {
   position: absolute; z-index: 2; max-width: 320px; padding: 12px 14px 12px;
@@ -232,11 +240,6 @@
 .dk-beats li.is-cur { color: #fdf8f1; }
 .dk-beats li.is-cur::marker { color: #fee7b8; }
 .dk-beat { font-style: normal; color: var(--iso-ink-2); }
-.dk-beats { margin: 4px 0 0; padding-left: 1.4em; color: #b9ad9f; }
-.dk-beats li { margin-bottom: 4px; transition: color .2s; }
-.dk-beats li.is-cur { color: #fdf8f1; }
-.dk-beats li.is-cur::marker { color: #fee7b8; }
-.dk-beat { font-style: normal; color: var(--iso-ink-2); }
 
 /* 指标条可按页隐藏：deck.metricsBar / step.metricsBar */
 .dk.dk--nometrics .dk-metrics { display: none; }
@@ -264,6 +267,8 @@
 .dk-stat .f { margin-top: 8px; font-size: 14px; color: var(--iso-ink-2); }
 .dk-agenda { display: flex; align-items: center; gap: 12px; margin-top: 30px; font-size: 14px; color: var(--iso-muted); }
 .dk-agenda span + span::before { content: "→"; margin-right: 12px; color: #c2b5a6; }
+.dk-credit { margin-top: 18px; font-size: 13px; line-height: 1.6; color: var(--iso-muted); }
+.dk-credit a { color: inherit; }
 .dk-cover.is-on .dk-cover__in > * { animation: dk-rise .7s cubic-bezier(.2, .8, .2, 1) both; }
 .dk-cover.is-on .dk-cover__in > :nth-child(2) { animation-delay: .08s; }
 .dk-cover.is-on .dk-cover__in > :nth-child(3) { animation-delay: .16s; }

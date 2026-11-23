@@ -85,6 +85,7 @@ cover: {
   subtitle: '一两句说明',
   stats: [{ label: '每百条成本', value: '{cost_new}', from: '原来 {cost_old}' }],  // 值末尾的单位会自动变小字
   agenda: ['现在的流程', '改哪一段', '怎么改', '效果如何'],
+  credit: '内容整理自 **某某** 的文章《……》',   // 可选：封面底部的出处小字
 }
 ```
 
@@ -140,6 +141,16 @@ scene: {
 | `crowd(rect, count, label, o)` | 人群底板 + 小人 | `rect = { x0, x1, y0, y1 }`，`count` 可补间增减 |
 | `zone(rect, label, o)` | 虚线区域：层、团队、机房 | `tint` 底色 |
 | `note(x, y, text, o)` | 漂浮便签 | `tone`，`icon`，`z` 离地高度 |
+| `figure(x, y, o)` | 人物或机器人，带表情 | `role: 'human' \| 'bot'`，`mood`，`gear: 'crown' \| 'headset' \| 'glasses'`，`color`，`s` 缩放 默认 1.6，`label`，`sub` |
+| `card(x, y, o)` | 立起来的界面卡片：审批、通知、弹窗 | `title`，`icon`，`lines`，`buttons`，`pick` 选中第几个按钮，`stamp` 印章字，`tone` 页眉色，`face: 'left' \| 'right' \| 'screen'`，`z` 悬浮高度 |
+| `doc(x, y, o)` | 一叠纸：规则、账本、文档 | `s` 边长(格) 默认 4，`n` 张数，`title` 纸面标题，`rows` 横线数，`label`，`sub` |
+| `say(x, y, text, o)` | 独立的对话气泡 | `tone`，`side: 'right' \| 'left'`，`z` 离地高度；多行用数组 |
+
+人物的 `mood`：`idle`（平常）、`work`（专注，面前多一台电脑）、`sleep`（闭眼冒 z）、`happy`（笑，带星星）、`ask`（疑问，头顶问号）、`worry`（皱眉，流汗）。翻页时改 `mood` 就能讲出“谁在干活、谁在等、谁搞定了”。
+
+任何实体都能加 `say: '一句话'` 冒出对话气泡（`sayTone`、`saySide` 调颜色和朝向），比在旁边放便签更像“它在说话”。
+
+**用人物和卡片讲“谁”和“什么时候找人”，用方块讲“系统”。** 一页里全是方块，听众分不清哪个是人、哪个是机器；关键角色换成 `figure`，人要处理的东西画成 `card`，文件画成 `doc`。
 
 通用状态（数字，翻页平滑过渡）：`cpu: 0–1`（头顶 CPU 条，`-1` 不显示），`heat: 0–1`（红色脉冲），`dead: 0–1`（变灰 + 红叉），`dim: 0–1`（弱化），`tags: [{ text, tone, icon }]`（头顶标签），`opacity`，`lift`。
 

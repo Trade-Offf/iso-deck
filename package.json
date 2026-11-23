@@ -19,7 +19,7 @@
     "examples/*/index.html"
   ],
   "scripts": {
-    "validate": "node scripts/cli.mjs validate examples/ai-translation examples/order-flow templates/report.html templates/system.html",
+    "validate": "node scripts/cli.mjs validate examples/ai-translation examples/agent-autoloop templates/report.html templates/system.html",
     "shoot": "node scripts/cli.mjs shoot",
     "gallery": "node scripts/cli.mjs gallery",
     "test": "node --test tests/*.test.mjs"

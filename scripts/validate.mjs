@@ -26,7 +26,7 @@ function visibleTexts(step) {
   push(step.body, '正文');
   if (step.callout) push(step.callout.text, '提示框');
   push(step.changes, '变化列表');
-  if (step.cover) push([step.cover.kicker, step.cover.title, step.cover.subtitle, step.cover.stats, step.cover.agenda], '封面');
+  if (step.cover) push([step.cover.kicker, step.cover.title, step.cover.subtitle, step.cover.stats, step.cover.agenda, step.cover.credit], '封面');
   const sc = step.scene || {};
   if (isObj(sc.card)) push([sc.card.title, sc.card.lines, (sc.card.bars || []).map((b) => [b.label, b.text])], '信息卡');
   if (isObj(sc.entities)) for (const [id, e] of Object.entries(sc.entities)) if (isObj(e)) push(entityText(e), `实体 ${id}`);
@@ -34,7 +34,7 @@ function visibleTexts(step) {
   for (const b of step.beats || []) if (b.card) push([b.card.title, b.card.lines], '分拍信息卡');
   return out;
 }
-const entityText = (e) => [e.label, e.sub, e.text, (e.tags || []).map((t) => t.text)];
+const entityText = (e) => [e.label, e.sub, e.text, e.say, e.title, e.lines, e.buttons, e.stamp, (e.tags || []).map((t) => t.text)];
 
 function refBase(v) {
   if (typeof v !== 'string') return null;

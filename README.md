@@ -83,6 +83,7 @@ iso-deck 把这四件事变成了结构和检查：
 
 此外：
 
+- **有人味的元素**：人物和机器人会做表情（干活、睡着、疑问、开心），还有审批卡片、对话气泡、一叠文档。一眼分清谁是人、谁是系统、什么时候要找人。
 - **单文件交付**：`build` 把引擎和样式内联进一个 HTML，不需要服务器，可以直接发微信或邮件。
 - **零依赖**：引擎和脚本都只用浏览器和 Node 自带的能力，`npm install` 都不用。
 - **能录视频**：直接导出 GIF / MP4，或生成 oil-studio 录屏剧本，口播稿直接当字幕。
@@ -131,15 +132,15 @@ node scripts/cli.mjs build my-deck        # 打包 → my-deck/dist/my-deck.html
 <a href="https://trade-offf.github.io/iso-deck/ai-translation.html">在线演示</a> · <a href="./examples/ai-translation/index.html">源码</a>
 </td>
 <td width="50%" align="center">
-<a href="https://trade-offf.github.io/iso-deck/order-flow.html"><img src="./docs/posters/order-flow.jpg" alt="一次下单经过哪些系统" /></a>
-<br><b>一次下单经过哪些系统</b> · 系统讲解 · 7 页<br>
-<sub>新人入职导览：全景逐块推近，再看两个常见故障</sub><br>
-<a href="https://trade-offf.github.io/iso-deck/order-flow.html">在线演示</a> · <a href="./examples/order-flow/index.html">源码</a>
+<a href="https://trade-offf.github.io/iso-deck/agent-autoloop.html"><img src="./docs/posters/agent-autoloop.jpg" alt="Agent-Autoloop 是怎么转起来的" /></a>
+<br><b>Agent-Autoloop 是怎么转起来的</b> · 项目拆解 · 10 页<br>
+<sub>一圈流程、一个小内核、四个踩坑换来的机制</sub><br>
+<a href="https://trade-offf.github.io/iso-deck/agent-autoloop.html">在线演示</a> · <a href="./examples/agent-autoloop/index.html">源码</a>
 </td>
 </tr>
 </table>
 
-示例里的数字都是示例数据。
+「AI 翻译提效」里的数字都是示例数据。「Agent-Autoloop」整理自 [数字生命卡兹克](https://x.com/Khazix0918) 的 X 长文[《开源我这折腾了1年的「Agent自动化系统」》](https://x.com/Khazix0918/status/2117776745688646139)，项目 [KKKKhazix/agent-autoloop](https://github.com/KKKKhazix/agent-autoloop) 以 MIT 开源；图解为二次整理，观点和数据归原作者。
 
 ## 工作原理
 

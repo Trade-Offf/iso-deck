@@ -87,13 +87,15 @@ node <skill目录>/scripts/cli.mjs build <deck目录>      # → <deck目录>/di
 - **每页开头、结尾都停在全景**。推近只为了看清正在讲的那一块，讲完就拉回来。
 - 改完任何坐标都要重新 `shoot` 并看图，不要凭想象判断位置。
 - 对外分享前去掉内部信息：公司名、内部系统名、真实业务数字、客户名。
+- **人和机器要看得出区别**。人、Agent 用 `figure`（翻页时改 `mood` 讲状态），要人处理的东西用 `card`，文件用 `doc`，系统才用 `block`。别整页都是方块。
+- **用别人的内容要注明出处**。封面写 `cover.credit`，台账 `source` 写到原文，正文转述、不大段照搬，引用原话要标出来。
 
 ## 文件
 
 ```
 engine/       引擎：iso-stage.js（舞台）、iso-deck.js（PPT 外壳）、iso.css
 templates/    report.html、system.html
-examples/     ai-translation（汇报）、order-flow（系统讲解），数字都是示例数据
+examples/     ai-translation（汇报）、agent-autoloop（项目拆解，内容整理自公开文章并注明出处）；汇报示例的数字是示例数据
 references/   templates · script-cleanup · scene-api · facts · layout-rules · camera-judgment · video
 scripts/      cli.mjs 及各子命令
 ```

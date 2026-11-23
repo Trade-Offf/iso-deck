@@ -79,7 +79,9 @@ Pages write `{cost_old}`; values and sources live in `facts`. `validate` flags h
 </tr>
 </table>
 
-Also: single-file delivery with no server needed, zero dependencies, and GIF / MP4 export.
+Also: characters and bots with moods (working, asleep, asking, happy), approval cards, speech bubbles and paper stacks, so the audience can tell people from systems at a glance; single-file delivery with no server needed; zero dependencies; GIF / MP4 export.
+
+Live examples: [AI translation](https://trade-offf.github.io/iso-deck/ai-translation.html) (sample numbers) and [How Agent-Autoloop works](https://trade-offf.github.io/iso-deck/agent-autoloop.html), adapted from [@Khazix0918](https://x.com/Khazix0918)'s [post](https://x.com/Khazix0918/status/2117776745688646139) about his MIT-licensed [agent-autoloop](https://github.com/KKKKhazix/agent-autoloop).
 
 ## Quick start
 

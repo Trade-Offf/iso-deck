@@ -393,7 +393,7 @@
           .join('');
         const agenda = (c.agenda || []).map((a) => `<span>${esc(a)}</span>`).join('');
         cover.className = `dk-cover${c.layout ? ` dk-cover--${c.layout}` : ''}`;
-        cover.innerHTML = `<div class="dk-cover__in">${c.kicker ? `<div class="k">${esc(c.kicker)}</div>` : ''}<h2>${md(c.title || '')}</h2>${c.subtitle ? `<p>${md(c.subtitle)}</p>` : ''}${stats ? `<div class="dk-stats">${stats}</div>` : ''}${agenda ? `<div class="dk-agenda">${agenda}</div>` : ''}</div>`;
+        cover.innerHTML = `<div class="dk-cover__in">${c.kicker ? `<div class="k">${esc(c.kicker)}</div>` : ''}<h2>${md(c.title || '')}</h2>${c.subtitle ? `<p>${md(c.subtitle)}</p>` : ''}${stats ? `<div class="dk-stats">${stats}</div>` : ''}${agenda ? `<div class="dk-agenda">${agenda}</div>` : ''}${c.credit ? `<div class="dk-credit">${md(c.credit)}</div>` : ''}</div>`;
         void cover.offsetWidth;
         cover.classList.add('is-on');
       } else cover.classList.remove('is-on');
