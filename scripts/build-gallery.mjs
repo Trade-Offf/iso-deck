@@ -57,7 +57,7 @@ export async function buildGallery({ posters = true } = {}) {
 body{margin:0;background:#f4efe6;color:#2b2622;font:15px/1.6 -apple-system,"PingFang SC","Hiragino Sans GB",sans-serif}
 main{max-width:1180px;margin:0 auto;padding:56px 24px 80px}
 h1{font-size:34px;margin:0 0 8px;letter-spacing:.5px}p.lead{margin:0 0 36px;color:#6b625a;max-width:720px}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:22px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(340px,100%),1fr));gap:22px}
 .card{display:block;background:#fffdf9;border-radius:14px;overflow:hidden;text-decoration:none;color:inherit;box-shadow:0 1px 2px rgba(0,0,0,.06),0 8px 24px rgba(60,40,20,.06);transition:transform .2s}
 .card:hover{transform:translateY(-3px)}.card img{width:100%;display:block;aspect-ratio:16/9;object-fit:cover;border-bottom:1px solid #eee4d6}
 .meta{padding:14px 16px 16px;display:grid;gap:4px}.meta span{color:#6b625a;font-size:13.5px}.meta i{font-style:normal;font-size:12.5px;color:#2f7a3d;font-weight:600}
